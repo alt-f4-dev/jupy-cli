@@ -5,7 +5,7 @@
 - `jupy` creates or discovers a Julia project, creates `.venv/`, adds or instantiates `PythonCall.jl`, binds PythonCall to the local virtual environment, and launches Julia.
 - `jupip` runs pip through that same local environment and regenerates `requirements.txt` after successful `install` or `uninstall` operations.
 
-The user-facing commands remain:
+The user-facing commands are:
 
 ```text
 jupy
@@ -290,8 +290,15 @@ A collaborator can clone the repository and run:
 
 ```bash
 jupy
+```
+
+for the Julia project requirements and then run:
+
+```bash
 jupip install -r requirements.txt
 ```
+
+for the Python requirements. 
 
 The local Julia and Python environments will then be recreated on that system.
 
