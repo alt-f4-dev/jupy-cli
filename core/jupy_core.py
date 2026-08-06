@@ -20,7 +20,7 @@ import sys
 import tempfile
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence
 
-TOOL_VERSION = "1.0.0"
+TOOL_VERSION = "0.0.1"
 STATE_SCHEMA_VERSION = "jupy-state-v2"
 GITIGNORE_CONTENT = ".venv/\nLocalPreferences.toml\n.CondaPkg/\n"
 
@@ -441,13 +441,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         root = find_project_root()
         verbose(program, f"resolved project root: {root}")
 
-        julia = find_julia()
         ensure_support_files(root, program)
         venv_python = ensure_virtual_environment(root, program)
-        ensure_julia_project(root, julia, program)
 
         if program == "jupip":
+            if not env_flag("JUPY_SKIP_JULIA_SETUP"):
+                julia = find_julia()
+                ensure_julia_project(root, julia, program)
+
             return run_jupip(root, venv_python, arguments, program)
+
+        julia = find_julia()
+        ensure_julia_project(root, julia, program)
         return run_jupy(root, julia, arguments, program)
     except JupyError as exc:
         log(program, str(exc))
