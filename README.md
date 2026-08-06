@@ -336,4 +336,4 @@ jupy --jupy-tool-version
 jupip --jupy-tool-version
 ```
 
-This package reports version `1.0.0`.
+This package reports version `0.0.1`.
