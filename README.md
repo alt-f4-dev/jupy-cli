@@ -1,17 +1,20 @@
-# jupy / jupip shared-core commands
+# jupy / jupip / jupyup shared-core commands
 
-`jupy` and `jupip` provide one project-local Julia–Python environment workflow on Linux, macOS, and native Windows.
+`jupy`, `jupip`, and `jupyup` provide one project-local Julia–Python environment workflow on Linux, macOS, and native Windows, together with a self-updater for the CLI itself.
 
-- `jupy` creates or discovers a Julia project, creates `.venv/`, adds or instantiates `PythonCall.jl`, binds PythonCall to the local virtual environment, and launches Julia.
-- `jupip` runs pip through that same local environment and regenerates `requirements.txt` after successful `install` or `uninstall` operations.
+- `jupy` creates or discovers a Julia project, creates `.venv/`, adds or instantiates `PythonCall.jl`, binds PythonCall to the local virtual environment, and dispatches Julia or Python scripts through the project environment.
+- `jupip` runs pip through that same local Python environment and regenerates `requirements.txt` after successful `install` or `uninstall` operations.
+- `jupyup` checks the latest published GitHub release of `jupy-cli` and updates the installed CLI without modifying project-local environments.
 
 The user-facing commands are:
 
 ```text
 jupy
 jupy analysis.jl
+jupy analysis.py
 jupip install numpy
 jupip uninstall numpy
+jupyup
 ```
 
 ## Package layout
@@ -21,22 +24,29 @@ jupy-cli/
 ├── bin/
 │   ├── jupy
 │   ├── jupip
+│   ├── jupyup
 │   ├── jupy.ps1
 │   ├── jupip.ps1
+│   ├── jupyup.ps1
 │   ├── jupy.cmd
-│   └── jupip.cmd
+│   ├── jupip.cmd
+│   └── jupyup.cmd
 ├── core/
-│   └── jupy_core.py
+│   ├── jupy_core.py
+│   └── jupy_update.py
 ├── tests/
-│   └── test_core.py
+│   ├── test_core.py
+│   └── test_update.py
 ├── install.sh
 ├── uninstall.sh
 ├── install.ps1
 ├── uninstall.ps1
-└── README.md
+├── LICENSE
+├── README.md
+└── VERSION
 ```
 
-The Python file under `core/` contains all project-management logic. The files under `bin/` only locate Python and invoke the core in either `jupy` or `jupip` mode.
+`core/jupy_core.py` contains the project-management and execution logic used by `jupy` and `jupip`. `core/jupy_update.py` contains the self-update logic used by `jupyup`. The files under `bin/` are thin platform-specific launchers.
 
 ## Requirements
 
@@ -53,11 +63,14 @@ sudo apt install python3-venv
 ```
 
 ## Linux and macOS installation
-
-From the package directory:
+Clone the repository:
+```bash
+git clone https://github.com/alt-f4-dev/jupy-cli
+```
+From the inside the package directory:
 
 ```bash
-chmod +x install.sh uninstall.sh bin/jupy bin/jupip
+chmod +x install.sh uninstall.sh bin/jupy bin/jupip bin/jupyup
 ./install.sh
 ```
 
@@ -67,9 +80,10 @@ The default locations are:
 ~/.local/share/jupy/
 ~/.local/bin/jupy
 ~/.local/bin/jupip
+~/.local/bin/jupyup
 ```
 
-If `~/.local/bin/jupy` or `~/.local/bin/jupip` is already a regular file, the installer preserves it with a `.pre-shared-core` suffix before installing the new launcher. This protects the earlier Linux-only implementation during migration.
+If `~/.local/bin/jupy`, `~/.local/bin/jupip`, or `~/.local/bin/jupyup` is already a regular file, the installer preserves it with a `.pre-shared-core` suffix before installing the new launcher. This protects the earlier Linux-only implementation during migration.
 
 If `~/.local/bin` is not already on `PATH`, add this to `~/.bashrc`, `~/.zshrc`, or the applicable shell profile:
 
@@ -105,8 +119,10 @@ The default installation is:
 
 ```text
 %LOCALAPPDATA%\Jupy\core\jupy_core.py
+%LOCALAPPDATA%\Jupy\core\jupy_update.py
 %LOCALAPPDATA%\Jupy\bin\jupy.cmd
 %LOCALAPPDATA%\Jupy\bin\jupip.cmd
+%LOCALAPPDATA%\Jupy\bin\jupyup.cmd
 ```
 
 The installer adds `%LOCALAPPDATA%\Jupy\bin` to the current user’s `PATH`. Open a new terminal afterward.
@@ -115,7 +131,9 @@ The `.cmd` shims allow the same commands to work from PowerShell, Command Prompt
 
 ```powershell
 jupy
+jupy analysis.py
 jupip install numpy
+jupyup --check
 ```
 
 Uninstall with:
@@ -182,7 +200,9 @@ Existing `.gitignore` and `requirements.txt` files are not overwritten during bo
    JULIA_PYTHONCALL_EXE=@venv
    ```
 
-8. Launches Julia with `--project=<resolved project root>`.
+8. Dispatches execution according to the first argument:
+   - No script or a non-`.py` first argument is passed through to Julia with `--project=<resolved project root>`.
+   - A first argument ending in `.py` is executed directly with the resolved project's `.venv` Python interpreter.
 
 Examples:
 
@@ -191,7 +211,18 @@ jupy
 jupy script.jl
 jupy -t auto script.jl
 jupy -e 'using PythonCall; println(pyimport("sys").executable)'
+jupy script.py
+jupy script.py input.dat --output result.dat
 ```
+
+For Python scripts, `jupy` runs the equivalent of:
+
+```text
+<project>/.venv/bin/python script.py ...              # Linux/macOS
+<project>\.venv\Scripts\python.exe script.py ...   # Windows
+```
+
+This lets standalone Python scripts and Julia scripts using `PythonCall.jl` share the same project-local Python environment. The `.py` dispatch is intentionally determined by the first argument; Julia command-line options continue to pass through unchanged.
 
 ## `jupip` behavior
 
@@ -216,6 +247,35 @@ After a successful `install` or `uninstall`, the core runs `pip freeze` and atom
 
 `requirements.txt` is therefore an exact environment snapshot, including transitive dependencies. Pip may leave orphaned dependencies after an uninstall; those packages remain in `requirements.txt` because they remain installed in `.venv/`.
 
+
+## `jupyup` behavior
+
+`jupyup` updates the installed `jupy` / `jupip` / `jupyup` CLI itself. It does not operate on the current Julia–Python project and does not modify `.venv/`, `Project.toml`, `Manifest.toml`, or `requirements.txt`.
+
+The updater compares the installed CLI version with the latest published GitHub release of `alt-f4-dev/jupy-cli`.
+
+Examples:
+
+```bash
+jupyup
+jupyup --check
+jupyup --version
+jupyup --force
+```
+
+- `jupyup` checks for a newer published release and installs it when available.
+- `jupyup --check` reports whether an update is available without changing the installation.
+- `jupyup --version` prints the installed CLI version.
+- `jupyup --force` reinstalls the latest release when the installed version already matches it.
+
+Before installing an update, `jupyup` downloads the release archive to a temporary directory, validates the expected platform-specific file layout, verifies that the release tag agrees with `VERSION`, syntax-checks the Python cores, and then atomically replaces the installed CLI files. Existing POSIX launcher symlinks are preserved.
+
+The first version that introduces `jupyup` must be installed through the normal installer. After that bootstrap installation, future published releases can be applied with:
+
+```bash
+jupyup
+```
+
 ## Environment variables
 
 | Variable | Purpose |
@@ -227,6 +287,8 @@ After a successful `install` or `uninstall`, the core runs `pip freeze` and atom
 | `JUPY_FORCE_SETUP=1` | Force Julia dependency setup even when the cached state matches |
 | `JUPY_INSTALL_ROOT` | Override installer data directory |
 | `JUPY_BIN_DIR` | Override Linux/macOS command directory |
+| `JUPY_GITHUB_REPOSITORY` | Override the GitHub repository queried by `jupyup` |
+| `JUPY_GITHUB_API_VERSION` | Override the GitHub API version header used by `jupyup` |
 
 Examples:
 
@@ -254,14 +316,14 @@ These are terminal commands, not editor-specific commands. They work in the VS C
 - Native Windows: PowerShell or Command Prompt through the `.cmd` shims.
 - Windows WSL: the Linux installation inside WSL.
 
-A portable `.vscode/tasks.json` entry can invoke `jupy`:
+A portable `.vscode/tasks.json` entry can invoke `jupy` for either a Julia (`.jl`) or Python (`.py`) file:
 
 ```json
 {
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Jupy: Run current Julia file",
+      "label": "Jupy: Run current file",
       "type": "shell",
       "command": "jupy",
       "args": ["${file}"],
@@ -274,7 +336,7 @@ A portable `.vscode/tasks.json` entry can invoke `jupy`:
 }
 ```
 
-The Julia extension’s own Run and Debug buttons do not automatically route Julia through `jupy`; use the integrated terminal or an explicit VS Code task when this bootstrap behavior is required.
+Editor Run and Debug actions do not automatically route execution through `jupy`; use the integrated terminal or an explicit VS Code task when the shared project bootstrap and dispatch behavior is required.
 
 ## Sharing projects
 
@@ -316,22 +378,25 @@ On Windows:
 py -3 -m unittest discover -s tests -v
 ```
 
-The unit tests validate project discovery, platform-specific virtual-environment paths, support-file preservation, PythonCall dependency detection, pip mutation detection, and Julia-state fingerprinting.
+The unit tests validate project discovery, platform-specific virtual-environment paths, support-file preservation, PythonCall dependency detection, pip mutation detection, Julia-state fingerprinting, semantic-version ordering, release-tree validation, platform-specific updater manifests, and updater installation behavior.
 
-The Linux/macOS launchers and shared core can be syntax-checked with:
+The Linux/macOS launchers and Python cores can be syntax-checked with:
 
 ```bash
-bash -n bin/jupy bin/jupip install.sh uninstall.sh
-python3 -m py_compile core/jupy_core.py
+bash -n bin/jupy bin/jupip bin/jupyup install.sh uninstall.sh
+python3 -m py_compile core/jupy_core.py core/jupy_update.py
 ```
 
-Native Windows launchers should additionally be tested on a Windows host or Windows CI runner.
+The GitHub Actions test matrix should run the unit tests on Linux, macOS, and Windows. Native Windows launchers should additionally be exercised on a Windows host or Windows CI runner.
 
 ## Tool version
 
-The shared core version can be queried without bootstrapping a project:
+The shared CLI version can be queried without bootstrapping a project:
 
 ```bash
 jupy --jupy-tool-version
 jupip --jupy-tool-version
+jupyup --version
 ```
+
+`VERSION` is the canonical release version. `TOOL_VERSION` in `core/jupy_core.py` should remain synchronized with it. Published release tags use the form `v<VERSION>`, for example `v0.0.2`.
