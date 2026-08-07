@@ -1,4 +1,5 @@
 # Remove the user-level Windows jupy installation.
+
 [CmdletBinding()]
 param(
     [string]$InstallRoot = $(if ($env:JUPY_INSTALL_ROOT) { $env:JUPY_INSTALL_ROOT } else { Join-Path $env:LOCALAPPDATA "Jupy" }),
@@ -17,4 +18,5 @@ if (-not $KeepPathEntry) {
 if (Test-Path -LiteralPath $InstallRoot) {
     Remove-Item -LiteralPath $InstallRoot -Recurse -Force
 }
+
 Write-Host "Removed jupy from $InstallRoot"

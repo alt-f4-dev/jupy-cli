@@ -20,7 +20,7 @@ import sys
 import tempfile
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence
 
-TOOL_VERSION = "0.0.1"
+TOOL_VERSION = "0.0.2"
 STATE_SCHEMA_VERSION = "jupy-state-v2"
 GITIGNORE_CONTENT = ".venv/\nLocalPreferences.toml\n.CondaPkg/\n"
 
@@ -397,12 +397,17 @@ def run_jupip(root: Path, venv_python: Path, arguments: Sequence[str], program: 
     return 0
 
 
-def run_jupy(root: Path, julia: str, arguments: Sequence[str], program: str) -> int:
-    environment = pythoncall_environment()
+def run_jupy(root: Path, julia: str, venv_python: Path, arguments: Sequence[str], program: str) -> int:
     verbose(program, f"project={root}")
-    verbose(program, f"python={venv_python_path(root)}")
+    verbose(program, f"python={venv_python}")
+    
+    if arguments and Path(arguments[0]).suffix.lower() == ".py":
+        command = [str(venv_python), *arguments]
+        environment = os.environ.copy()
+    else:
+        command = [julia, f"--project={root}", *arguments]
+        environment = pythoncall_environment()
 
-    command = [julia, f"--project={root}", *arguments]
     try:
         result = subprocess.run(command, env=environment, check=False)
     except KeyboardInterrupt:
@@ -453,7 +458,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
         julia = find_julia()
         ensure_julia_project(root, julia, program)
-        return run_jupy(root, julia, arguments, program)
+        return run_jupy(root, julia, venv_python, arguments, program)
     except JupyError as exc:
         log(program, str(exc))
         return 1

@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# Linux/macOS launcher for the shared jupyup updater core.
+set -euo pipefail
+
+resolve_script_dir() {
+    local source=${BASH_SOURCE[0]}
+    local directory target
+
+    while [[ -L $source ]]; do
+        directory=$(cd -P -- "$(dirname "$source")" && pwd)
+        target=$(readlink "$source")
+        if [[ $target == /* ]]; then
+            source=$target
+        else
+            source=$directory/$target
+        fi
+    done
+
+    cd -P -- "$(dirname "$source")" && pwd
+}
+
+find_core() {
+    local script_dir=$1
+    local candidate
+
+    if [[ -n ${JUPY_UPDATE_CORE:-} ]]; then
+        [[ -f $JUPY_UPDATE_CORE ]] || {
+            printf 'jupyup: JUPY_UPDATE_CORE does not exist: %s\n' "$JUPY_UPDATE_CORE" >&2
+            exit 1
+        }
+        printf '%s\n' "$JUPY_UPDATE_CORE"
+        return
+    fi
+
+    if [[ -n ${JUPY_INSTALL_ROOT:-} ]]; then
+        candidate="$JUPY_INSTALL_ROOT/core/jupy_update.py"
+        if [[ -f $candidate ]]; then
+            printf '%s\n' "$candidate"
+            return
+        fi
+    fi
+
+    for candidate in \
+        "$script_dir/../core/jupy_update.py" \
+        "${XDG_DATA_HOME:-$HOME/.local/share}/jupy/core/jupy_update.py" \
+        "$HOME/.local/share/jupy/core/jupy_update.py"
+    do
+        if [[ -f $candidate ]]; then
+            printf '%s\n' "$candidate"
+            return
+        fi
+    done
+
+    printf 'jupyup: could not locate jupy_update.py; reinstall jupy\n' >&2
+    exit 1
+}
+
+find_python() {
+    local candidate
+
+    if [[ -n ${JUPY_PYTHON:-} ]]; then
+        candidate=$JUPY_PYTHON
+        if [[ -x $candidate ]]; then
+            printf '%s\n' "$candidate"
+            return
+        fi
+        if command -v -- "$candidate" >/dev/null 2>&1; then
+            command -v -- "$candidate"
+            return
+        fi
+        printf 'jupyup: JUPY_PYTHON is not executable: %s\n' "$candidate" >&2
+        exit 1
+    fi
+
+    if command -v python3 >/dev/null 2>&1; then
+        command -v python3
+    elif command -v python >/dev/null 2>&1; then
+        command -v python
+    else
+        printf 'jupyup: Python 3 was not found in PATH\n' >&2
+        exit 1
+    fi
+}
+
+script_dir=$(resolve_script_dir)
+core=$(find_core "$script_dir")
+python=$(find_python)
+exec "$python" "$core" "$@"

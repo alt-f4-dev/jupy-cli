@@ -335,5 +335,3 @@ The shared core version can be queried without bootstrapping a project:
 jupy --jupy-tool-version
 jupip --jupy-tool-version
 ```
-
-This package reports version `0.0.1`.
