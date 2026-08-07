@@ -152,14 +152,6 @@ cd calculation
 jupy
 ```
 
-or, on PowerShell:
-
-```powershell
-mkdir calculation
-cd calculation
-jupy
-```
-
 creates or initializes:
 
 ```text
