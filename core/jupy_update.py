@@ -343,8 +343,8 @@ def locate_release_root(extracted: Path, platform_name: Optional[str] = None) ->
     return unique[0]
 
 
-def validate_release_tree(source_root: Path, release: ReleaseInfo) -> None:
-    for relative in required_release_files():
+def validate_release_tree(source_root: Path, release: ReleaseInfo, platform_name: Optional[str] = None) -> None:
+    for relative in required_release_files(platform_name):
         path = source_root / relative
         if not path.is_file():
             raise JupyUpdateError(f"release is missing required file: {relative}")
@@ -481,8 +481,8 @@ def restore_backup(backup: Backup) -> None:
                 pass
 
 
-def apply_update(source_root: Path, root: Path, bin_dir: Path) -> None:
-    manifest = install_manifest(source_root, root, bin_dir)
+def apply_update(source_root: Path, root: Path, bin_dir: Path, platform_name: Optional[str] = None) -> None:
+    manifest = install_manifest(source_root, root, bin_dir, platform_name)
     backups: List[Backup] = []
 
     try:
