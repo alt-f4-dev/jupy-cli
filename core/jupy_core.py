@@ -253,7 +253,7 @@ def ensure_uv_environment(root: Path, program: str) -> Path:
         if not existing:
             config = venv_dir / "pyvenv.cfg"
             config_text = config.read_text(encoding="utf-8") if config.is_file() else ""
-            if not re.search(r"(?im)^uv\\s*=", config_text):
+            if not re.search(r"(?im)^uv\s*=", config_text):
                 raise JupyError(
                     f"{venv_dir} exists without uv ownership metadata; "
                     "juuv refuses to synchronize a possibly pip-managed environment"
@@ -273,47 +273,9 @@ def ensure_uv_environment(root: Path, program: str) -> Path:
         raise JupyError("uv sync failed; existing project files were preserved")
     if not executable_file(python):
         raise JupyError(f"uv sync did not produce the Python interpreter at {python}")
-    atomic_write_text(marker, "uv\\n")
+    atomic_write_text(marker, "uv\n")
     return python
 
-
-
-def find_uv() -> str:
-    configured = os.environ.get("JUPY_UV")
-    if configured:
-        return resolve_command(configured, "JUPY_UV")
-    result = shutil.which("uv")
-    if not result:
-        raise JupyError("uv not found; install uv or set JUPY_UV")
-    return result
-
-
-def ensure_uv_environment(root: Path, program: str) -> Path:
-    """Initialize and sync a native uv project, protecting existing pip environments."""
-    uv = find_uv()
-    venv = root / ".venv"
-    marker = venv / ".jupy-backend"
-    python = venv_python_path(root)
-    if venv.exists():
-        if not venv.is_dir():
-            raise JupyError(f"{venv} is not a directory")
-        owner = marker.read_text(encoding="utf-8").strip() if marker.is_file() else ""
-        cfg = venv / "pyvenv.cfg"
-        cfg_text = cfg.read_text(encoding="utf-8") if cfg.is_file() else ""
-        is_uv = bool(re.search(r"(?im)^uv\\s*=", cfg_text))
-        if (owner and owner != "uv") or (not owner and not is_uv):
-            raise JupyError(f"{venv} has no recognized uv ownership; cannot safely run uv sync")
-    if not (root / "pyproject.toml").is_file():
-        if (root / "uv.lock").exists():
-            raise JupyError("uv.lock exists without pyproject.toml")
-        if run_checked([uv, "init", "--bare", "--no-workspace"], cwd=root).returncode:
-            raise JupyError("uv init failed")
-    if run_checked([uv, "sync"], cwd=root).returncode:
-        raise JupyError("uv sync failed")
-    if not executable_file(python):
-        raise JupyError(f"uv did not create {python}")
-    atomic_write_text(marker, "uv\\n")
-    return python
 
 
 def manifest_files(root: Path) -> List[Path]:
