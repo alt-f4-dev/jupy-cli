@@ -478,8 +478,8 @@ def usage() -> str:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
 
-    if sys.version_info < (3, 8):
-        print("jupy: Python 3.8 or newer is required", file=sys.stderr)
+    if sys.version_info < (3, 11):
+        print("jupy: Python 3.11 or newer is required", file=sys.stderr)
         return 2
 
     if not arguments or arguments[0] not in {"jupy", "jupip", "juuv"}:
