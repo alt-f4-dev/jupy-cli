@@ -525,8 +525,8 @@ def parse_arguments(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    if sys.version_info < (3, 8):
-        error("Python 3.8 or newer is required")
+    if sys.version_info < (3, 11):
+        error("Python 3.11 or newer is required")
         return 2
 
     arguments = parse_arguments(argv)
