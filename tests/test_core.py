@@ -86,5 +86,32 @@ class CoreTests(unittest.TestCase):
             self.assertNotEqual(first, second)
 
 
+    def test_uv_backend_absent_does_not_call_pip(self) -> None:
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch.object(jupy_core, "find_uv", return_value="uv"), \
+                 patch.object(jupy_core, "run_checked") as run, \\
+                 patch.object(jupy_core, "executable_file", return_value=True):
+                run.return_value.returncode = 0
+                python = jupy_core.ensure_uv_environment(root, "juuv")
+                self.assertEqual(python, jupy_core.venv_python_path(root))
+                self.assertEqual([call.args[0][:2] for call in run.call_args_list],
+                                 [["uv", "init"], ["uv", "sync"]])
+                self.assertFalse((root / "requirements.txt").exists())
+
+    def test_uv_refuses_preexisting_pip_environment(self) -> None:
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".venv").mkdir()
+            (root / ".venv" / "pyvenv.cfg").write_text("home = /usr/bin\\n")
+            with patch.object(jupy_core, "find_uv", return_value="uv"), \
+                 patch.object(jupy_core, "run_checked") as run:
+                with self.assertRaisesRegex(jupy_core.JupyError, "ownership"):
+                    jupy_core.ensure_uv_environment(root, "juuv")
+                run.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
