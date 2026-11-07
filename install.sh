@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install jupy, jupip, and jupyup for the current Linux or macOS user.
+# Install jupy, jupip, juuv, and jupyup for the current Linux or macOS user.
 
 set -euo pipefail
 
@@ -33,19 +33,22 @@ install -m 0644 "$script_dir/core/jupy_update.py" "$install_root/core/jupy_updat
 
 install -m 0755 "$script_dir/bin/jupy" "$install_root/bin/jupy"
 install -m 0755 "$script_dir/bin/jupip" "$install_root/bin/jupip"
+install -m 0755 "$script_dir/bin/juuv" "$install_root/bin/juuv"
 install -m 0755 "$script_dir/bin/jupyup" "$install_root/bin/jupyup"
 
 backup_existing_command "$bin_dir/jupy"
 backup_existing_command "$bin_dir/jupip"
+backup_existing_command "$bin_dir/juuv"
 backup_existing_command "$bin_dir/jupyup"
 
 ln -s "$install_root/bin/jupy" "$bin_dir/jupy"
 ln -s "$install_root/bin/jupip" "$bin_dir/jupip"
+ln -s "$install_root/bin/juuv" "$bin_dir/juuv"
 ln -s "$install_root/bin/jupyup" "$bin_dir/jupyup"
 
 printf 'Installed jupy core: %s\n' "$install_root/core/jupy_core.py"
 printf 'Installed jupy updater: %s\n' "$install_root/core/jupy_update.py"
-printf 'Installed commands: %s/jupy, %s/jupip, and %s/jupyup\n' "$bin_dir" "$bin_dir" "$bin_dir"
+printf 'Installed commands: %s/jupy, %s/jupip, %s/juuv, and %s/jupyup\n' "$bin_dir" "$bin_dir" "$bin_dir" "$bin_dir"
 
 case ":$PATH:" in
     *":$bin_dir:"*) ;;

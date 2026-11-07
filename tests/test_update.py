@@ -132,7 +132,7 @@ class LayoutTests(unittest.TestCase):
             (root / "bin").mkdir(parents=True)
             bin_dir.mkdir()
 
-            for name in ("jupy", "jupip", "jupyup"):
+            for name in ("jupy", "jupip", "juuv", "jupyup"):
                 target = root / "bin" / name
                 target.write_text("old\n", encoding="utf-8")
                 (bin_dir / name).symlink_to(target)
@@ -148,6 +148,7 @@ class LayoutTests(unittest.TestCase):
             self.assertIn(root / "bin" / "jupy", targets)
             self.assertNotIn(bin_dir / "jupy", targets)
             self.assertNotIn(bin_dir / "jupip", targets)
+            self.assertNotIn(bin_dir / "juuv", targets)
             self.assertNotIn(bin_dir / "jupyup", targets)
 
     def test_windows_manifest_contains_all_windows_launchers(self):
@@ -177,6 +178,8 @@ class LayoutTests(unittest.TestCase):
                     "VERSION",
                     "core/jupy_core.py",
                     "core/jupy_update.py",
+                    "bin/juuv.ps1",
+                    "bin/juuv.cmd",
                     "bin/jupy.ps1",
                     "bin/jupy.cmd",
                     "bin/jupip.ps1",
@@ -213,7 +216,7 @@ class LayoutTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            for name in ("jupy", "jupip", "jupyup"):
+            for name in ("jupy", "jupip", "juuv", "jupyup"):
                 (root / "bin" / name).write_text(
                     "old\n",
                     encoding="utf-8",
@@ -266,6 +269,8 @@ class LayoutTests(unittest.TestCase):
             )
 
             for name in (
+                "juuv.ps1",
+                "juuv.cmd",
                 "jupy.ps1",
                 "jupy.cmd",
                 "jupip.ps1",
