@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - juuv-ext
     tags:
       - "v*"
 
@@ -68,6 +69,7 @@ jobs:
           bash -n
           bin/jupy
           bin/jupip
+          bin/juuv
           bin/jupyup
           install.sh
           uninstall.sh
