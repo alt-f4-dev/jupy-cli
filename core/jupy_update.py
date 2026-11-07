@@ -304,6 +304,8 @@ def required_release_files(platform_name: Optional[str] = None) -> Tuple[str, ..
     )
     if platform_name == "nt":
         return common + (
+            "bin/juuv.ps1",
+            "bin/juuv.cmd",
             "bin/jupy.ps1",
             "bin/jupy.cmd",
             "bin/jupip.ps1",
@@ -312,6 +314,7 @@ def required_release_files(platform_name: Optional[str] = None) -> Tuple[str, ..
             "bin/jupyup.cmd",
         )
     return common + (
+        "bin/juuv",
         "bin/jupy",
         "bin/jupip",
         "bin/jupyup",
@@ -378,11 +381,11 @@ def install_manifest(
     ]
 
     if platform_name == "nt":
-        for name in ("jupy.ps1", "jupy.cmd", "jupip.ps1", "jupip.cmd", "jupyup.ps1", "jupyup.cmd"):
+        for name in ("jupy.ps1", "jupy.cmd", "juuv.ps1", "juuv.cmd", "jupip.ps1", "jupip.cmd", "jupyup.ps1", "jupyup.cmd"):
             manifest.append((source_root / "bin" / name, root / "bin" / name, False))
         return manifest
 
-    for name in ("jupy", "jupip", "jupyup"):
+    for name in ("jupy", "jupip", "juuv", "jupyup"):
         source = source_root / "bin" / name
         installed = root / "bin" / name
         manifest.append((source, installed, True))
