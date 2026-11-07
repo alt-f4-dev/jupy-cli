@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cross-platform core for the jupy and jupip commands.
+"""Cross-platform core for the jupy, jupip, and juuv commands.
 
 jupy bootstraps a Julia project and a project-local Python virtual environment,
 then launches Julia with PythonCall bound to that environment.
@@ -226,6 +226,57 @@ def ensure_virtual_environment(root: Path, program: str) -> Path:
     return python
 
 
+
+def find_uv() -> str:
+    configured = os.environ.get("JUPY_UV")
+    if configured:
+        return resolve_command(configured, "JUPY_UV")
+    resolved = shutil.which("uv")
+    if not resolved:
+        raise JupyError("uv was not found in PATH; install uv or set JUPY_UV")
+    return resolved
+
+
+def ensure_uv_environment(root: Path, program: str) -> Path:
+    """Synchronize a native uv project without adopting a pip-managed venv."""
+    uv = find_uv()
+    venv_dir = root / ".venv"
+    marker = venv_dir / ".jupy-backend"
+    python = venv_python_path(root)
+
+    if venv_dir.exists():
+        if not venv_dir.is_dir():
+            raise JupyError(f"{venv_dir} exists and is not a directory")
+        existing = marker.read_text(encoding="utf-8").strip() if marker.is_file() else ""
+        if existing and existing != "uv":
+            raise JupyError(f"{venv_dir} is managed by {existing}; juuv refuses to replace it")
+        if not existing:
+            config = venv_dir / "pyvenv.cfg"
+            config_text = config.read_text(encoding="utf-8") if config.is_file() else ""
+            if not re.search(r"(?im)^uv\\s*=", config_text):
+                raise JupyError(
+                    f"{venv_dir} exists without uv ownership metadata; "
+                    "juuv refuses to synchronize a possibly pip-managed environment"
+                )
+
+    if not (root / "pyproject.toml").is_file():
+        if (root / "uv.lock").exists():
+            raise JupyError("uv.lock exists without pyproject.toml; repair the uv project first")
+        log(program, f"initializing native uv project at {root}")
+        result = run_checked([uv, "init", "--bare", "--no-workspace"], cwd=root)
+        if result.returncode != 0:
+            raise JupyError("uv init failed")
+
+    log(program, f"synchronizing uv environment at {root}")
+    result = run_checked([uv, "sync"], cwd=root)
+    if result.returncode != 0:
+        raise JupyError("uv sync failed; existing project files were preserved")
+    if not executable_file(python):
+        raise JupyError(f"uv sync did not produce the Python interpreter at {python}")
+    atomic_write_text(marker, "uv\\n")
+    return python
+
+
 def manifest_files(root: Path) -> List[Path]:
     files: List[Path] = []
     project = project_file(root)
@@ -419,7 +470,7 @@ def usage() -> str:
     return (
         "usage: jupy_core.py {jupy|jupip} [arguments...]\n"
         "\n"
-        "This file is normally called through the jupy or jupip launcher."
+        "This file is normally called through the jupy, jupip, or juuv launcher."
     )
 
 
@@ -430,7 +481,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print("jupy: Python 3.8 or newer is required", file=sys.stderr)
         return 2
 
-    if not arguments or arguments[0] not in {"jupy", "jupip"}:
+    if not arguments or arguments[0] not in {"jupy", "jupip", "juuv"}:
         print(usage(), file=sys.stderr)
         return 2
 
@@ -446,8 +497,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         root = find_project_root()
         verbose(program, f"resolved project root: {root}")
 
-        ensure_support_files(root, program)
-        venv_python = ensure_virtual_environment(root, program)
+        if program == "juuv":
+            # uv owns Python metadata; do not create requirements.txt or invoke pip.
+            gitignore = root / ".gitignore"
+            if not gitignore.exists():
+                atomic_write_text(gitignore, GITIGNORE_CONTENT)
+            venv_python = ensure_uv_environment(root, program)
+        else:
+            ensure_support_files(root, program)
+            venv_python = ensure_virtual_environment(root, program)
 
         if program == "jupip":
             if not env_flag("JUPY_SKIP_JULIA_SETUP"):
