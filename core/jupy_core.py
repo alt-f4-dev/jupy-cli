@@ -277,6 +277,45 @@ def ensure_uv_environment(root: Path, program: str) -> Path:
     return python
 
 
+
+def find_uv() -> str:
+    configured = os.environ.get("JUPY_UV")
+    if configured:
+        return resolve_command(configured, "JUPY_UV")
+    result = shutil.which("uv")
+    if not result:
+        raise JupyError("uv not found; install uv or set JUPY_UV")
+    return result
+
+
+def ensure_uv_environment(root: Path, program: str) -> Path:
+    """Initialize and sync a native uv project, protecting existing pip environments."""
+    uv = find_uv()
+    venv = root / ".venv"
+    marker = venv / ".jupy-backend"
+    python = venv_python_path(root)
+    if venv.exists():
+        if not venv.is_dir():
+            raise JupyError(f"{venv} is not a directory")
+        owner = marker.read_text(encoding="utf-8").strip() if marker.is_file() else ""
+        cfg = venv / "pyvenv.cfg"
+        cfg_text = cfg.read_text(encoding="utf-8") if cfg.is_file() else ""
+        is_uv = bool(re.search(r"(?im)^uv\\s*=", cfg_text))
+        if (owner and owner != "uv") or (not owner and not is_uv):
+            raise JupyError(f"{venv} has no recognized uv ownership; cannot safely run uv sync")
+    if not (root / "pyproject.toml").is_file():
+        if (root / "uv.lock").exists():
+            raise JupyError("uv.lock exists without pyproject.toml")
+        if run_checked([uv, "init", "--bare", "--no-workspace"], cwd=root).returncode:
+            raise JupyError("uv init failed")
+    if run_checked([uv, "sync"], cwd=root).returncode:
+        raise JupyError("uv sync failed")
+    if not executable_file(python):
+        raise JupyError(f"uv did not create {python}")
+    atomic_write_text(marker, "uv\\n")
+    return python
+
+
 def manifest_files(root: Path) -> List[Path]:
     files: List[Path] = []
     project = project_file(root)
@@ -468,7 +507,7 @@ def run_jupy(root: Path, julia: str, venv_python: Path, arguments: Sequence[str]
 
 def usage() -> str:
     return (
-        "usage: jupy_core.py {jupy|jupip} [arguments...]\n"
+        "usage: jupy_core.py {jupy|jupip|juuv} [arguments...]\n"
         "\n"
         "This file is normally called through the jupy, jupip, or juuv launcher."
     )
