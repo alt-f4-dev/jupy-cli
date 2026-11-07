@@ -392,3 +392,35 @@ jupyup --version
 ```
 
 `VERSION` is the canonical release version. `TOOL_VERSION` in `core/jupy_core.py` should remain synchronized with it. Published release tags use the form `v<VERSION>`, for example `v0.0.2`.
+
+
+## Native uv backend: `juuv`
+
+`juuv` provides the same Julia/Python script dispatch and PythonCall integration as
+`jupy`, but delegates Python environment management to Astral's `uv`.
+
+`uv` must be installed separately and available on PATH (or provided through
+`JUPY_UV`). Neither `jupy` nor `jupip` requires `uv`.
+
+```bash
+mkdir calculation && cd calculation
+juuv
+uv add numpy scipy
+juuv analysis.py
+juuv simulation.jl
+```
+
+The `juuv` backend initializes a bare native uv project with `uv init --bare
+--no-workspace` when `pyproject.toml` is absent, then runs `uv sync`.
+The uv-managed `.venv` is the Python interpreter used for direct Python
+execution and through `PythonCall.jl`; dependencies live in `pyproject.toml`
+and `uv.lock`. `juuv` does not invoke pip or rewrite `requirements.txt`.
+
+**Environment ownership:** To avoid accidentally deleting pip-managed packages,
+`juuv` refuses to synchronize an existing `.venv` that lacks uv ownership
+metadata (the `uv` entry in `pyvenv.cfg` or the `.jupy-backend` marker).
+Use a separate project directory or deliberately migrate the environment first.
+Existing `jupy` and `jupip` code paths are unchanged.
+
+The new `juuv` launcher is installed alongside `jupy`, `jupip`, and
+`jupyup` by the platform installers and included in self-updates.
