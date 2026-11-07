@@ -20,7 +20,7 @@ import sys
 import tempfile
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence
 
-TOOL_VERSION = "0.0.2"
+TOOL_VERSION = "0.0.3"
 STATE_SCHEMA_VERSION = "jupy-state-v2"
 GITIGNORE_CONTENT = ".venv/\nLocalPreferences.toml\n.CondaPkg/\n"
 
