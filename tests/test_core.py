@@ -91,7 +91,7 @@ class CoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             with patch.object(jupy_core, "find_uv", return_value="uv"), \
-                 patch.object(jupy_core, "run_checked") as run, \\
+                 patch.object(jupy_core, "run_checked") as run, \
                  patch.object(jupy_core, "executable_file", return_value=True):
                 run.return_value.returncode = 0
                 python = jupy_core.ensure_uv_environment(root, "juuv")
@@ -105,7 +105,7 @@ class CoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / ".venv").mkdir()
-            (root / ".venv" / "pyvenv.cfg").write_text("home = /usr/bin\\n")
+            (root / ".venv" / "pyvenv.cfg").write_text("home = /usr/bin\n")
             with patch.object(jupy_core, "find_uv", return_value="uv"), \
                  patch.object(jupy_core, "run_checked") as run:
                 with self.assertRaisesRegex(jupy_core.JupyError, "ownership"):
