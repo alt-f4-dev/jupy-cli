@@ -53,7 +53,7 @@ jupy-cli/
 Each system needs:
 
 1. Julia available through `julia`, or specified with `JUPY_JULIA`.
-2. Python 3.8 or newer.
+2. Python 3.11 or newer.
 3. Python virtual-environment support.
 
 On Debian, Ubuntu, or Linux Mint, virtual-environment support may require:
