@@ -1,7 +1,7 @@
-"""Process-global, lazy JuliaCall runtime bound to a single Julia project.
+"""Process-global, lazy JuliaCall runtime with explicit module identity rules.
 
-JuliaCall embeds one Julia runtime per Python process. This module deliberately
-does not pretend that separate JuliaRuntime objects create separate interpreters.
+The embedded Julia interpreter is unique to the Python process. Jupy does not
+support interpreter reset, implicit hot reload, or concurrent foreign calls.
 """
 
 from __future__ import annotations
@@ -19,14 +19,15 @@ _LOCK = threading.RLock()
 _MAIN: Any = None
 _CONFIG: tuple[Path, Path] | None = None
 _MODULES: dict[str, tuple[Any, Path | None]] = {}
+_SOURCES: dict[Path, str] = {}
+_FAILED = False
 
 
 class RuntimeConfigurationError(RuntimeError):
-    """An interpreter or project conflicts with process-global Julia state."""
+    """Runtime configuration, lifecycle, or module identity is invalid."""
 
 
 def find_project_root(start: Path | None = None) -> Path:
-    """Return the nearest enclosing Julia project, or the start directory."""
     start = (start or Path.cwd()).resolve()
     for directory in (start, *start.parents):
         if (directory / "Project.toml").is_file() or (directory / "JuliaProject.toml").is_file():
@@ -46,10 +47,9 @@ def _resolve_julia(candidate: str | None) -> Path:
 
 
 class JuliaRuntime:
-    """Lazy facade to the single embedded Julia runtime in the current process.
+    """One process-global JuliaCall interpreter with serialized import bookkeeping.
 
-    Calls are serialized *during initialization and import bookkeeping*.
-    This does not claim thread-safe concurrent execution of arbitrary Julia code.
+    This does not claim general thread safety for invoking Julia functions.
     """
 
     def __init__(self, project: str | Path | None = None, executable: str | None = None) -> None:
@@ -61,15 +61,21 @@ class JuliaRuntime:
         return _MAIN is not None
 
     def start(self) -> Any:
-        global _MAIN, _CONFIG
+        global _MAIN, _CONFIG, _FAILED
         with _LOCK:
-            # Config checks must run even for a previously initialized instance.
+            if _FAILED:
+                raise RuntimeConfigurationError(
+                    "a previous JuliaCall initialization failed; restart the Python process"
+                )
             project = self._project or (_CONFIG[0] if _CONFIG else find_project_root())
             if not (project / "Project.toml").is_file() and not (project / "JuliaProject.toml").is_file():
-                raise RuntimeConfigurationError(f"no Julia project found at {project}; initialize with jupy or juuv first")
-            executable = _resolve_julia(self._executable if self._executable is not None else (
-                str(_CONFIG[1]) if _CONFIG is not None else None
-            ))
+                raise RuntimeConfigurationError(
+                    f"no Julia project found at {project}; initialize with jupy or juuv first"
+                )
+            executable = _resolve_julia(
+                self._executable if self._executable is not None else
+                (str(_CONFIG[1]) if _CONFIG is not None else None)
+            )
             desired = (project, executable)
             if _CONFIG is not None:
                 if desired != _CONFIG:
@@ -98,8 +104,9 @@ class JuliaRuntime:
             try:
                 from juliacall import Main
             except BaseException:
-                # A failed runtime initialization may leave JuliaCall partly loaded.
-                # Fail closed rather than promise safe reinitialization.
+                # A failed embedded-runtime import can leave native state partially
+                # initialized. No retry is allowed in this Python process.
+                _FAILED = True
                 for key, old in old_values.items():
                     if old is None:
                         os.environ.pop(key, None)
@@ -111,12 +118,12 @@ class JuliaRuntime:
             return Main
 
     def load(self, name: str, *, path: str | Path | None = None) -> Any:
-        """Canonical cross-language module loader; reuse the Julia runtime."""
+        """Load and cache a package or a named local module without hot reloading."""
         return self.import_module(name, path=path)
 
     def import_module(self, name: str, *, path: str | Path | None = None) -> Any:
-        """Load a Julia module once; reject ambiguous reimports or source changes."""
-        if not _MODULE_NAME.fullmatch(name):
+        """Compatibility alias for load; both interfaces share the same cache."""
+        if not isinstance(name, str) or not _MODULE_NAME.fullmatch(name):
             raise ValueError("module name must be a single Julia identifier")
         with _LOCK:
             main = self.start()
@@ -124,16 +131,25 @@ class JuliaRuntime:
             cached = _MODULES.get(name)
             if cached is not None:
                 if source is not None and source != cached[1]:
-                    raise RuntimeConfigurationError(f"{name} already loaded from {cached[1]}; cannot change source")
+                    raise RuntimeConfigurationError(
+                        f"{name} already loaded from {cached[1]}; cannot change source"
+                    )
                 return cached[0]
             if source is not None:
                 if not source.is_file():
                     raise FileNotFoundError(source)
+                previous = _SOURCES.get(source)
+                if previous is not None and previous != name:
+                    raise RuntimeConfigurationError(
+                        f"source {source} already registered as {previous}; cannot alias as {name}"
+                    )
                 main.include(str(source))
             else:
                 main.seval(f"import {name}")
             module = getattr(main, name)
             _MODULES[name] = (module, source)
+            if source is not None:
+                _SOURCES[source] = name
             return module
 
 
