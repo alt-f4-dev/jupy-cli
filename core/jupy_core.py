@@ -510,7 +510,8 @@ def install_interop(root: Path, julia: str, python: Path, program: str) -> None:
     )
     if run_checked(
         [julia, "--startup-file=no", "--history-file=no", "-e",
-         julia_code, str(root), str(jl_dst)],
+         julia_code, str(root), ".jupy-interop/julia/Jupy"],
+        cwd=root,
         env=pythoncall_environment(),
     ).returncode != 0:
         raise JupyError("failed to install the Julia interoperability package")
