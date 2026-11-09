@@ -4,6 +4,10 @@ on:
     branches: [interop]
   pull_request:
     paths: ['python/**', 'julia/**', 'tests/interop/**', '.github/workflows/interop-ci.yml', 'core/**']
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   unit:
     runs-on: ${{ matrix.os }}
@@ -19,6 +23,7 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: python -m compileall -q python/jupy tests/interop
       - run: python -m unittest discover -s tests/interop -p 'test_*.py' -v
+      - run: python -m unittest discover -s tests -p 'test_*.py' -v
   integration:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
