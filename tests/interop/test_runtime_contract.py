@@ -16,15 +16,20 @@ import jupy.runtime as runtime
 
 class GlobalRuntimeTests(unittest.TestCase):
     def setUp(self):
-        self.saved = (runtime._MAIN, runtime._CONFIG, dict(runtime._MODULES))
+        self.saved = (runtime._MAIN, runtime._CONFIG, dict(runtime._MODULES), dict(runtime._SOURCES), runtime._FAILED)
         runtime._MAIN = None
         runtime._CONFIG = None
         runtime._MODULES.clear()
+        runtime._SOURCES.clear()
+        runtime._FAILED = False
 
     def tearDown(self):
-        runtime._MAIN, runtime._CONFIG, modules = self.saved
+        runtime._MAIN, runtime._CONFIG, modules, sources, failed = self.saved
         runtime._MODULES.clear()
         runtime._MODULES.update(modules)
+        runtime._SOURCES.clear()
+        runtime._SOURCES.update(sources)
+        runtime._FAILED = failed
 
     def test_single_initialization_and_conflicts(self):
         with tempfile.TemporaryDirectory() as folder:
