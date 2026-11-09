@@ -7,6 +7,10 @@ function increment(x::Integer)
     return x + 1
 end
 
+include("ExampleInteropHelper.jl")
+
 calls() = counter[]
+
+fail() = error("interop fixture failure")
 
 end
