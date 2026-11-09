@@ -16,9 +16,11 @@ New-Item -ItemType Directory -Force -Path $BinDirectory, $CoreDirectory | Out-Nu
 Copy-Item -Force (Join-Path $SourceRoot "VERSION") (Join-Path $InstallRoot "VERSION")
 Copy-Item -Force (Join-Path $SourceRoot "core\jupy_core.py") (Join-Path $CoreDirectory "jupy_core.py")
 Copy-Item -Force (Join-Path $SourceRoot "core\jupy_update.py") (Join-Path $CoreDirectory "jupy_update.py")
-Copy-Item -Force -Recurse (Join-Path $SourceRoot "python") (Join-Path $InstallRoot "python")
-New-Item -ItemType Directory -Force -Path (Join-Path $InstallRoot "julia") | Out-Null
-Copy-Item -Force -Recurse (Join-Path $SourceRoot "julia\Jupy") (Join-Path $InstallRoot "julia\Jupy")
+$PythonTarget = Join-Path $InstallRoot "python"
+$JuliaTarget = Join-Path $InstallRoot "julia\\Jupy"
+New-Item -ItemType Directory -Force -Path $PythonTarget, $JuliaTarget | Out-Null
+Copy-Item -Force -Recurse (Join-Path $SourceRoot "python\\*") $PythonTarget
+Copy-Item -Force -Recurse (Join-Path $SourceRoot "julia\\Jupy\\*") $JuliaTarget
 
 foreach ($file in @(
     "jupy.ps1", "jupip.ps1", "juuv.ps1", "jupyup.ps1",
