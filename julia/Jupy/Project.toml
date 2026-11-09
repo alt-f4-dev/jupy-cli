@@ -3,7 +3,7 @@ uuid = "b247b739-1adf-4cf9-bf51-9bb781517d7e"
 version = "0.1.0"
 
 [deps]
-PythonCall = "6099a3de-0909-46bc-9c72-19260b30ff38"
+PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
 
 [compat]
 julia = "1.10"
