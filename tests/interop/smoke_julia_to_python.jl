@@ -10,25 +10,27 @@ again = Jupy.pyimport("sys")
 builtins = Jupy.pyimport("builtins")
 @assert PythonCall.pyconvert(Int, builtins.len((1, 2, 3))) == 3
 
-caught = false
-try
-    builtins.eval("1/0")
-catch err
-    caught = occursin("ZeroDivisionError", sprint(showerror, err))
+let caught = false
+    try
+        builtins.eval("1/0")
+    catch err
+        caught = occursin("ZeroDivisionError", sprint(showerror, err))
+    end
+    @assert caught "Python exception did not propagate with its error class"
 end
-@assert caught "Python exception did not propagate with its error class"
 
 local_module = Jupy.load("ExamplePythonInterop"; path=joinpath(@__DIR__, "ExamplePythonInterop.py"))
 @assert PythonCall.pyconvert(Int, local_module.increment(40)) == 41
 @assert PythonCall.pyconvert(Int, local_module.increment(41)) == 42
 @assert Jupy.load("ExamplePythonInterop") === local_module
 @assert PythonCall.pyconvert(Int, local_module.number_of_calls()) == 2
-local_caught = false
-try
-    local_module.fail()
-catch err
-    local_caught = occursin("interop Python fixture failure", sprint(showerror, err))
+let local_caught = false
+    try
+        local_module.fail()
+    catch err
+        local_caught = occursin("interop Python fixture failure", sprint(showerror, err))
+    end
+    @assert local_caught "Local Python module exception did not propagate"
 end
-@assert local_caught "Local Python module exception did not propagate"
 
 println("Julia -> Python: canonical load, local source, state and exceptions verified")
