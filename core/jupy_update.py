@@ -301,6 +301,11 @@ def required_release_files(platform_name: Optional[str] = None) -> Tuple[str, ..
         "VERSION",
         "core/jupy_core.py",
         "core/jupy_update.py",
+        "python/pyproject.toml",
+        "python/jupy/__init__.py",
+        "python/jupy/runtime.py",
+        "julia/Jupy/Project.toml",
+        "julia/Jupy/src/Jupy.jl",
     )
     if platform_name == "nt":
         return common + (
@@ -379,6 +384,13 @@ def install_manifest(
         (source_root / "core" / "jupy_core.py", root / "core" / "jupy_core.py", False),
         (source_root / "core" / "jupy_update.py", root / "core" / "jupy_update.py", False),
     ]
+
+    for package_root in ("python", "julia/Jupy"):
+        source_dir = source_root / package_root
+        for file in sorted(source_dir.rglob("*")):
+            if not file.is_file() or "__pycache__" in file.parts or file.suffix == ".pyc":
+                continue
+            manifest.append((file, root / file.relative_to(source_root), False))
 
     if platform_name == "nt":
         for name in ("jupy.ps1", "jupy.cmd", "juuv.ps1", "juuv.cmd", "jupip.ps1", "jupip.cmd", "jupyup.ps1", "jupyup.cmd"):
