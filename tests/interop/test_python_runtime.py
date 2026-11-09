@@ -12,9 +12,17 @@ from unittest.mock import patch
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "python"))
 from jupy.runtime import JuliaRuntime, RuntimeConfigurationError, find_project_root
+import jupy
+from unittest.mock import patch
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_public_load_delegates_to_process_runtime(self):
+        token = object()
+        with patch.object(jupy.julia, "load", return_value=token) as underlying:
+            self.assertIs(jupy.load("LinearAlgebra"), token)
+            underlying.assert_called_once_with("LinearAlgebra", path=None)
+
     def test_project_discovery_prefers_nearest(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
