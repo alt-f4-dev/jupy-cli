@@ -98,5 +98,5 @@ jobs:
           else
             test -f requirements.txt
           fi
-          .venv/bin/python -c "from jupy import JuliaRuntime; from pathlib import Path; r=JuliaRuntime(project=Path.cwd()); m=r.import_module('ExampleInterop', path=Path('$GITHUB_WORKSPACE/tests/interop/ExampleInterop.jl')); assert m.increment(7)==8; assert m.increment(8)==9; assert m.calls()==2; assert r.initialized"
-          python "$GITHUB_WORKSPACE/core/jupy_core.py" "$BACKEND" -e 'using Jupy; @assert Jupy.pyimport("sys") === Jupy.pyimport("sys")'
+          .venv/bin/python -c "import jupy; from pathlib import Path; m=jupy.load('ExampleInterop', path=Path('$GITHUB_WORKSPACE/tests/interop/ExampleInterop.jl')); assert m.increment(7)==8; assert m.increment(8)==9; assert m.calls()==2; assert jupy.julia.initialized"
+          python "$GITHUB_WORKSPACE/core/jupy_core.py" "$BACKEND" -e 'using Jupy; @assert Jupy.load("sys") === Jupy.load("sys")'
