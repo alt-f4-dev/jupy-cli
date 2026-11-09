@@ -58,8 +58,8 @@ class GlobalRuntimeTests(unittest.TestCase):
                     self.assertIs(first.import_module("Example"), fake_module)
                     self.assertIs(second.import_module("Example"), fake_module)
                     self.assertEqual(imports, ["import Example"])
-                    self.assertEqual(os.environ["PYTHON_JULIACALL_PROJECT"], str(a))
-                    self.assertEqual(os.environ["PYTHON_JULIACALL_EXE"], str(exe))
+                    self.assertEqual(Path(os.environ["PYTHON_JULIACALL_PROJECT"]).resolve(), a.resolve())
+                    self.assertEqual(Path(os.environ["PYTHON_JULIACALL_EXE"]).resolve(), exe.resolve())
                     with self.assertRaisesRegex(runtime.RuntimeConfigurationError, "cannot switch"):
                         runtime.JuliaRuntime(project=b, executable=str(exe)).start()
                     with self.assertRaisesRegex(runtime.RuntimeConfigurationError, "cannot switch"):
