@@ -21,7 +21,7 @@ class RuntimeTests(unittest.TestCase):
             (root / "Project.toml").touch()
             nested = root / "nested" / "child"
             nested.mkdir(parents=True)
-            self.assertEqual(find_project_root(nested), root)
+            self.assertEqual(find_project_root(nested), root.resolve())
 
     def test_import_is_lazy(self):
         self.assertFalse(JuliaRuntime(project=".", executable="missing")._project is None)
