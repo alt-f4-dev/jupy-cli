@@ -16,6 +16,24 @@ Provide native bidirectional calls between Python and Julia, with Julia initiali
 - Loading packages and compiling Julia methods can still incur first-use costs. The contract does not promise that every call is compilation-free.
 - JuliaCall and PythonCall are alternative **host directions** of the same underlying PythonCall ecosystem, not separate concurrently managed runtimes. In particular, this prototype does not promise safe independent initialization in a process that already embeds the other language.
 
+## Phase 1B/1C: opt-in project setup
+
+From an existing project that has been initialized with `jupy` or `juuv`, run:
+
+```sh
+juuv --jupy-interop-setup   # uv-backed projects
+# or
+jupy --jupy-interop-setup   # pip-backed projects
+```
+
+This explicitly vendors the experimental interop Python and Julia packages into `.jupy-interop/`, records the Python dependency (uv or pip), and registers the local Julia package with `Pkg.develop`. It does not translate source code. The directory should be committed with the project for portability; only the virtual environment and local machine settings are transient.
+
+The setup command is experimental on the `interop` branch and is **not available in the published v0.0.3 release**. Install this branch's CLI to test it. The command modifies the current project's `pyproject.toml`/`uv.lock` or pip requirements and Julia `Project.toml`/`Manifest.toml`; review the changes before committing.
+
+Running the setup command again reuses existing vendored sources, including user modifications; it does not automatically upgrade them. Use a new project or explicitly manage the vendored package version to upgrade.
+
+The Python host obtains an embedded Julia runtime once per Python process. Distinct command invocations do not share process state. The Julia host similarly reuses one embedded Python interpreter through PythonCall. The interpreter/project binding is immutable after initialization. Run with the project's interpreter through `jupy <script.py>` or `juuv <script.py>`, and run Julia scripts with `jupy <script.jl>` or `juuv <script.jl>`.
+
 ## Installation and example — Python host
 
 From a project already initialized with `juuv` or `jupy`, and from the cloned `jupy-cli` repository on the `interop` branch:
