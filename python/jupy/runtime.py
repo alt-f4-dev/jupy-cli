@@ -110,6 +110,10 @@ class JuliaRuntime:
             _CONFIG = desired
             return Main
 
+    def load(self, name: str, *, path: str | Path | None = None) -> Any:
+        """Canonical cross-language module loader; reuse the Julia runtime."""
+        return self.import_module(name, path=path)
+
     def import_module(self, name: str, *, path: str | Path | None = None) -> Any:
         """Load a Julia module once; reject ambiguous reimports or source changes."""
         if not _MODULE_NAME.fullmatch(name):
