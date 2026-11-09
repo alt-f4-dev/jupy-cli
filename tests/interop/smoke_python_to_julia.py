@@ -17,6 +17,13 @@ example = julia.import_module("ExampleInterop", path=MODULE)
 assert example.increment(40) == 41
 assert example.increment(41) == 42
 assert julia.import_module("ExampleInterop") is example
-assert example.calls() == 2
+assert example.double_increment(0) == 2
+assert example.calls() == 4
+try:
+    example.fail()
+except Exception as exc:
+    assert "interop fixture failure" in str(exc)
+else:
+    raise AssertionError("Julia exception did not propagate")
 assert julia.initialized
 print("Python -> Julia: persistent runtime and state verified")
