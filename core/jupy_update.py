@@ -302,13 +302,6 @@ def required_release_files(platform_name: Optional[str] = None) -> Tuple[str, ..
         "core/jupy_core.py",
         "core/jupy_update.py",
     )
-    for package_root in ("python", "julia/Jupy"):
-        source_dir = source_root / package_root
-        for file in sorted(source_dir.rglob("*")):
-            if not file.is_file() or "__pycache__" in file.parts or file.suffix == ".pyc":
-                continue
-            manifest.append((file, root / file.relative_to(source_root), False))
-
     if platform_name == "nt":
         return common + (
             "bin/juuv.ps1",
