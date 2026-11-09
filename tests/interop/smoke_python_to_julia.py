@@ -8,7 +8,9 @@ import sys
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "python"))
 
-from jupy import julia
+from jupy import JuliaRuntime
+
+julia = JuliaRuntime(project=Path(__file__).resolve().parent / 'julia-project')
 
 MODULE = Path(__file__).with_name("ExampleInterop.jl")
 example = julia.import_module("ExampleInterop", path=MODULE)
