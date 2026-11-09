@@ -7,7 +7,7 @@ name = "jupy-interop"
 version = "0.0.0"
 description = "Experimental persistent Julia-Python runtime for jupy-cli"
 requires-python = ">=3.11"
-dependencies = ["juliacall>=0.9.22,<0.10"]
+dependencies = ["juliacall==0.9.37"]
 
 [tool.setuptools.packages.find]
 where = ["."]
