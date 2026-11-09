@@ -467,6 +467,59 @@ def run_jupy(root: Path, julia: str, venv_python: Path, arguments: Sequence[str]
     return normalize_return_code(result.returncode)
 
 
+def install_interop(root: Path, julia: str, python: Path, program: str) -> None:
+    """Explicitly provision the experimental interop API in the project.
+
+    Vendor the two small interface packages locally so the project's lockfiles
+    do not depend on the location of a global jupy-cli installation.
+    """
+    source_root = Path(os.environ.get(
+        "JUPY_INTEROP_SOURCE", str(Path(__file__).resolve().parent.parent)
+    )).expanduser().resolve()
+    python_src = source_root / "python"
+    julia_src = source_root / "julia" / "Jupy"
+    if not (python_src / "pyproject.toml").is_file() or not (julia_src / "Project.toml").is_file():
+        raise JupyError(
+            f"interop package sources are unavailable at {source_root}; "
+            "install from the interop checkout or set JUPY_INTEROP_SOURCE"
+        )
+    destination = root / ".jupy-interop"
+    py_dst = destination / "python"
+    jl_dst = destination / "julia" / "Jupy"
+    destination.mkdir(parents=True, exist_ok=True)
+    for src, dst in ((python_src, py_dst), (julia_src, jl_dst)):
+        if dst.exists():
+            # Never replace a project-local package tree: it may contain edits.
+            if src.resolve() != dst.resolve():
+                log(program, f"reusing existing interoperability source at {dst}")
+            continue
+        shutil.copytree(src, dst, ignore=shutil.ignore_patterns(
+            "__pycache__", "*.pyc", ".pytest_cache", "*.egg-info"
+        ))
+    if program == "juuv":
+        command = [find_uv(), "add", "--editable", "./.jupy-interop/python"]
+    else:
+        command = [str(python), "-m", "pip", "install", "-e", str(py_dst)]
+    if run_checked(command, cwd=root).returncode != 0:
+        raise JupyError("failed to install the Python interoperability package")
+    julia_code = (
+        "using Pkg; "
+        "Pkg.activate(ARGS[1]); "
+        "Pkg.develop(path=ARGS[2]); "
+        "Pkg.instantiate()"
+    )
+    if run_checked(
+        [julia, "--startup-file=no", "--history-file=no", "-e",
+         julia_code, str(root), str(jl_dst)],
+        env=pythoncall_environment(),
+    ).returncode != 0:
+        raise JupyError("failed to install the Julia interoperability package")
+    if program != "juuv":
+        sync_requirements(root, python, program)
+    atomic_write_text(state_file(root), julia_environment_fingerprint(root) + "\n")
+    log(program, "interop runtime installed; Julia and Python project dependencies updated")
+
+
 def usage() -> str:
     return (
         "usage: jupy_core.py {jupy|jupip|juuv} [arguments...]\n"
@@ -517,6 +570,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
         julia = find_julia()
         ensure_julia_project(root, julia, program)
+        if arguments == ["--jupy-interop-setup"]:
+            install_interop(root, julia, venv_python, program)
+            return 0
         return run_jupy(root, julia, venv_python, arguments, program)
     except JupyError as exc:
         log(program, str(exc))
