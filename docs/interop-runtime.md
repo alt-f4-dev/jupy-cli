@@ -2,6 +2,10 @@
 
 Status: experimental; not released. This is an additive prototype on the `interop` branch. Existing `jupy`, `jupip`, `juuv`, and `jupyup` commands remain unchanged.
 
+## Canonical API
+
+Python hosts use `import jupy; module = jupy.load("JuliaModule", path="source.jl")`. Julia hosts use `using Jupy; module = Jupy.load("python.module"; path="source.py")`. The optional path is for a local module; omit it for an installed package. Modules are cached per embedded runtime, and the previous `jupy.julia.import_module` and `Jupy.pyimport` entry points are retained for compatibility. Native-language `import` syntax is not overloaded. Runtime and dependency configuration remain distinct from module loading.
+
 ## Objective
 
 Provide native bidirectional calls between Python and Julia, with Julia initialized once per Python process and Python initialized once per Julia process. No source-to-source translation, per-call subprocesses, implicit shared heap, or automatic memory-conversion promises.
@@ -45,13 +49,13 @@ uv add --editable /absolute/path/to/jupy-cli/python
 For pip-backed projects use `jupip install -e /absolute/path/to/jupy-cli/python`. Importing `jupy` does not initialize Julia. The module file below must define `module LatticeSolver ... end` and expose a function named `solve`.
 
 ```python
-from jupy import julia
+import jupy
 
-solver = julia.import_module("LatticeSolver", path="LatticeSolver.jl")
+solver = jupy.load("LatticeSolver", path="LatticeSolver.jl")
 first = solver.solve(1)
 second = solver.solve(2)
-assert julia.initialized
-assert solver is julia.import_module("LatticeSolver")
+assert jupy.julia.initialized
+assert solver is jupy.load("LatticeSolver")
 ```
 
 `import_module("LinearAlgebra")` imports a Julia package available to the active project without an explicit source path. This experimental API only accepts a single Julia module identifier.
@@ -69,9 +73,9 @@ Then:
 
 ```julia
 using Jupy
-np = Jupy.pyimport("numpy")
+np = Jupy.load("numpy")
 a = np.arange(5)
-@assert np === Jupy.pyimport("numpy")
+@assert np === Jupy.load("numpy")
 ```
 
 The `juuv`/`jupy` launcher already binds PythonCall to the project's `.venv`. When running Julia outside those launchers, configure the PythonCall interpreter explicitly before loading PythonCall.
