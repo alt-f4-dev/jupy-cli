@@ -43,9 +43,12 @@ jobs:
           julia --startup-file=no --project=tests/interop/julia-project -e 'using Pkg; Pkg.add(PackageSpec(name="PythonCall", version="0.9.37")); Pkg.develop(path=abspath("julia/Jupy")); Pkg.instantiate()'
       - name: Python hosted Julia
         run: python tests/interop/smoke_python_to_julia.py
+      - name: Bind PythonCall to active Python interpreter
+        shell: bash
+        run: |
+          echo "JULIA_PYTHONCALL_EXE=$(python -c 'import sys; print(sys.executable)')" >> "$GITHUB_ENV"
       - name: Julia hosted Python
         shell: bash
         env:
           JULIA_CONDAPKG_BACKEND: 'Null'
-          JULIA_PYTHONCALL_EXE: '@venv'
         run: julia --startup-file=no --project=tests/interop/julia-project tests/interop/smoke_julia_to_python.jl
