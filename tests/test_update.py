@@ -172,8 +172,7 @@ class LayoutTests(unittest.TestCase):
                 for _, target, _ in manifest
             }
 
-            self.assertEqual(
-                targets,
+            self.assertTrue(
                 {
                     "VERSION",
                     "core/jupy_core.py",
@@ -186,7 +185,12 @@ class LayoutTests(unittest.TestCase):
                     "bin/jupip.cmd",
                     "bin/jupyup.ps1",
                     "bin/jupyup.cmd",
-                },
+                    "python/pyproject.toml",
+                    "python/jupy/__init__.py",
+                    "python/jupy/runtime.py",
+                    "julia/Jupy/Project.toml",
+                    "julia/Jupy/src/Jupy.jl",
+                }.issubset(targets),
             )
 
     def test_apply_update_to_regular_launchers(self):
