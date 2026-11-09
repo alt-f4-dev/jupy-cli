@@ -77,9 +77,12 @@ class StabilizationTests(unittest.TestCase):
             other = root / "Other.jl"
             other.write_text("module Other end\n", encoding="utf-8")
             module = object()
-            main = types.SimpleNamespace(Example=module)
+            main = types.SimpleNamespace()
             includes = []
-            main.include = lambda src: includes.append(src)
+            def include(src):
+                includes.append(src)
+                main.Example = module
+            main.include = include
             main.seval = lambda expr: includes.append(expr)
             with patch.object(runtime, "_MAIN", main), patch.object(
                 runtime, "_CONFIG", (root.resolve(), (root / "julia").resolve())
