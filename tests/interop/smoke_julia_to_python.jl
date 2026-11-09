@@ -9,4 +9,12 @@ again = Jupy.pyimport("sys")
 builtins = Jupy.pyimport("builtins")
 @assert PythonCall.pyconvert(Int, builtins.len((1, 2, 3))) == 3
 
-println("Julia -> Python: persistent runtime and module caching verified")
+caught = false
+try
+    builtins.eval("1/0")
+catch err
+    caught = occursin("ZeroDivisionError", sprint(showerror, err))
+end
+@assert caught "Python exception did not propagate with its error class"
+
+println("Julia -> Python: persistent runtime, module cache and exceptions verified")
