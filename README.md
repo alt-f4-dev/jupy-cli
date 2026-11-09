@@ -42,7 +42,7 @@ Both options run Julia with the same Julia project and configure PythonCall to u
 
 ## Experimental bidirectional runtime (`interop` branch)
 
-The `interop` branch adds an opt-in runtime facade backed by **JuliaCall** (Python → Julia) and **PythonCall** (Julia → Python), with process-local runtime reuse, deterministic Julia project ownership, and module caching. It does **not** translate source code or implement a replacement low-level bridge. This feature is not included in the v0.0.3 release.
+The `interop` branch adds the canonical `load()` API in both languages, plus an opt-in runtime facade backed by **JuliaCall** (Python → Julia) and **PythonCall** (Julia → Python), with process-local runtime reuse, deterministic Julia project ownership, and module caching. It does **not** translate source code or implement a replacement low-level bridge. This feature is not included in the v0.0.3 release.
 
 After cloning and installing the `interop` branch, initialize a project using `jupy` or `juuv`, then run exactly one of:
 
@@ -56,8 +56,8 @@ Setup vendors the interface packages into the project at `.jupy-interop/`, regis
 Python calling Julia:
 
 ```python
-from jupy import julia
-solver = julia.import_module("LatticeSolver", path="LatticeSolver.jl")
+import jupy
+solver = jupy.load("LatticeSolver", path="LatticeSolver.jl")
 result = solver.solve(x)
 ```
 
@@ -65,7 +65,7 @@ Julia calling Python:
 
 ```julia
 using Jupy
-numpy = Jupy.pyimport("numpy")
+numpy = Jupy.load("numpy")
 result = numpy.asarray([1, 2, 3])
 ```
 
