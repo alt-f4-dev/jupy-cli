@@ -143,6 +143,10 @@ class JuliaRuntime:
                     raise RuntimeConfigurationError(
                         f"source {source} already registered as {previous}; cannot alias as {name}"
                     )
+                if hasattr(main, name):
+                    raise RuntimeConfigurationError(
+                        f"Julia module {name} already exists outside Jupy; refusing to redefine it"
+                    )
                 main.include(str(source))
             else:
                 main.seval(f"import {name}")
