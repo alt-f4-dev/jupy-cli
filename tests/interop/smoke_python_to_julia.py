@@ -8,14 +8,15 @@ import sys
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "python"))
 
-from jupy import JuliaRuntime
+from jupy import JuliaRuntime, load as jupy_load
 
 julia = JuliaRuntime(project=Path(__file__).resolve().parent / 'julia-project')
 
 MODULE = Path(__file__).with_name("ExampleInterop.jl")
-example = julia.import_module("ExampleInterop", path=MODULE)
+example = julia.load("ExampleInterop", path=MODULE)
 assert example.increment(40) == 41
 assert example.increment(41) == 42
+assert julia.load("ExampleInterop") is example
 assert julia.import_module("ExampleInterop") is example
 assert example.double_increment(0) == 2
 assert example.calls() == 4
