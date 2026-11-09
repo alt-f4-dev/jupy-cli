@@ -2,8 +2,9 @@
 using Jupy
 using PythonCall
 
-sys = Jupy.pyimport("sys")
+sys = Jupy.load("sys")
 again = Jupy.pyimport("sys")
+@assert Jupy.load("sys") === sys
 @assert sys === again
 
 builtins = Jupy.pyimport("builtins")
@@ -17,4 +18,17 @@ catch err
 end
 @assert caught "Python exception did not propagate with its error class"
 
-println("Julia -> Python: persistent runtime, module cache and exceptions verified")
+local_module = Jupy.load("ExamplePythonInterop"; path=joinpath(@__DIR__, "ExamplePythonInterop.py"))
+@assert PythonCall.pyconvert(Int, local_module.increment(40)) == 41
+@assert PythonCall.pyconvert(Int, local_module.increment(41)) == 42
+@assert Jupy.load("ExamplePythonInterop") === local_module
+@assert PythonCall.pyconvert(Int, local_module.number_of_calls()) == 2
+local_caught = false
+try
+    local_module.fail()
+catch err
+    local_caught = occursin("interop Python fixture failure", sprint(showerror, err))
+end
+@assert local_caught "Local Python module exception did not propagate"
+
+println("Julia -> Python: canonical load, local source, state and exceptions verified")
