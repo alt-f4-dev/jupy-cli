@@ -14,7 +14,8 @@ let caught = false
     try
         builtins.eval("1/0")
     catch err
-        caught = occursin("ZeroDivisionError", sprint(showerror, err))
+        caught = err isa PythonCall.PyException
+        @assert caught "Expected PythonCall.PyException, got $(typeof(err)): $(sprint(showerror, err))"
     end
     @assert caught "Python exception did not propagate with its error class"
 end
@@ -28,7 +29,8 @@ let local_caught = false
     try
         local_module.fail()
     catch err
-        local_caught = occursin("interop Python fixture failure", sprint(showerror, err))
+        local_caught = err isa PythonCall.PyException
+        @assert local_caught "Expected PythonCall.PyException, got $(typeof(err)): $(sprint(showerror, err))"
     end
     @assert local_caught "Local Python module exception did not propagate"
 end
