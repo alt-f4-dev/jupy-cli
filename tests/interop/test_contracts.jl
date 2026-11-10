@@ -73,4 +73,10 @@ end
     @test_throws Jupy.ContractViolation wrapped(Inf)
 end
 
+@testset "Contract-driven Python module binding" begin
+    wrapped = Jupy.bind_contract(joinpath(root, "float.toml"); mode=:strict)
+    @test PythonCall.pyconvert(Float64, wrapped(16.0)) == 4.0
+    @test Jupy.resolve("examples.python_sqrt") === wrapped
+end
+
 println("Julia Phase 2 contracts: parser, specialization, schemas, registry, and Python calls passed")
