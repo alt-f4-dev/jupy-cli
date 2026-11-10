@@ -1,0 +1,17 @@
+schema_version = 1
+[function]
+id = "examples.bad"
+version = "1.0.0"
+language = "julia"
+module = "Example"
+symbol = "bad"
+
+[[inputs]]
+name = "matrix"
+kind = "array"
+dtype = "float64"
+shape = ["N+1"]
+
+[output]
+name = "result"
+kind = "integer"
