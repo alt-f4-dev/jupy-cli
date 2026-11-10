@@ -81,6 +81,19 @@ end
     @test_throws Jupy.ContractViolation wrapped(Inf)
 end
 
+@testset "Named domain validators with bind-time resolution" begin
+    c = contract("validator")
+    @test_throws Jupy.ContractError Jupy.bind(x -> x + 1, c; mode=:structural)
+    @test_throws Jupy.ContractError Jupy.bind(x -> x + 1, c; mode=:strict)
+    calls = Int[]
+    Jupy.register_validator("examples.positive", n -> (push!(calls, n); n > 0))
+    wrapped = Jupy.bind(x -> x + 1, c; mode=:strict)
+    @test wrapped(2) == 3
+    @test_throws Jupy.ContractViolation wrapped(-2)
+    @test calls == [2, -2]
+    @test_throws Jupy.ContractError Jupy.register_validator("examples.positive", n -> n > 0)
+end
+
 @testset "Contract-driven Python module binding" begin
     wrapped = Jupy.bind_contract(joinpath(root, "float.toml"); mode=:strict)
     @test PythonCall.pyconvert(Float64, wrapped(16.0)) == 4.0
