@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "python"))
 from jupy.contracts import (
     Contract, ContractError, ContractViolation, Registry, bind, compatibility,
-    read_contract, Dimension,
+    read_contract, Dimension, register_validator,
 )
 
 CONTRACTS = ROOT / "tests" / "contracts"
@@ -140,6 +140,25 @@ class Phase2Tests(unittest.TestCase):
             registry.resolve(c.identity)
         self.assertTrue(compatibility(c, c2))
         self.assertFalse(compatibility(c, replace(c, output=replace(c.output, kind="float"))))
+
+    def test_named_validator_bound_once_and_strictly_enforced(self):
+        c = read_contract(CONTRACTS / "validator.toml")
+        with self.assertRaisesRegex(ContractError, "numerical predicates"):
+            bind(lambda n: n + 1, c, mode="structural")
+        with self.assertRaisesRegex(ContractError, "not registered"):
+            bind(lambda n: n + 1, c, mode="strict")
+        calls = []
+        def positive(n):
+            calls.append(n)
+            return n > 0
+        register_validator("examples.positive", positive)
+        bound = bind(lambda n: n + 1, c, mode="strict")
+        self.assertEqual(bound(2), 3)
+        with self.assertRaisesRegex(ContractViolation, "custom validator"):
+            bound(-2)
+        self.assertEqual(calls, [2, -2])
+        with self.assertRaisesRegex(ContractError, "already registered"):
+            register_validator("examples.positive", positive)
 
     def test_bad_function_and_bad_output(self):
         c = read_contract(CONTRACTS / "increment.toml")
