@@ -40,6 +40,37 @@ juuv simulation.jl
 
 Both options run Julia with the same Julia project and configure PythonCall to use the project's `.venv`.
 
+## Experimental bidirectional runtime (`interop` branch)
+
+The `interop` branch adds the canonical `load()` API in both languages, plus an opt-in runtime facade backed by **JuliaCall** (Python → Julia) and **PythonCall** (Julia → Python), with process-local runtime reuse, deterministic Julia project ownership, and module caching. It does **not** translate source code or implement a replacement low-level bridge. This feature is not included in the v0.0.3 release.
+
+After cloning the repository, switch to `interop` (`git switch interop`) and run the installer before initializing a project using `jupy` or `juuv`, then run exactly one of:
+
+```bash
+juuv --jupy-interop-setup  # uv project
+jupy --jupy-interop-setup  # pip project
+```
+
+Setup vendors the interface packages into the project at `.jupy-interop/`, registers Julia package `Jupy`, and installs Python package `jupy-interop`. Both Julia and Python dependencies become part of the project lock/configuration files. The command is explicit because it modifies project files.
+
+Python calling Julia:
+
+```python
+import jupy
+solver = jupy.load("LatticeSolver", path="LatticeSolver.jl")
+result = solver.solve(x)
+```
+
+Julia calling Python:
+
+```julia
+using Jupy
+numpy = Jupy.load("numpy")
+result = numpy.asarray([1, 2, 3])
+```
+
+An embedded Julia runtime is initialized **once per Python process** and reused for subsequent calls. A new shell invocation starts a new process; no persistent cross-process daemon is created. The Julia project/executable cannot be switched once the process has initialized Julia. See [runtime contracts](docs/interop-runtime.md) and the [Phase 1 stabilization guarantees](docs/phase1-stabilization.md).
+
 ## Commands
 
 | Command | Purpose | Examples |
@@ -72,10 +103,10 @@ The installer does not install Julia, Python, or uv.
 
 ### Linux / macOS
 
-To install the development version containing `juuv`:
+To install the default-branch source checkout (the experimental interop API additionally requires `git switch interop`):
 
 ```bash
-git clone --branch juuv-ext https://github.com/alt-f4-dev/jupy-cli.git
+git clone https://github.com/alt-f4-dev/jupy-cli.git
 cd jupy-cli
 ./install.sh
 ```
@@ -102,7 +133,7 @@ To uninstall from the repository directory:
 
 ### Windows
 
-Clone the `juuv-ext` branch, open PowerShell in the repository directory, and run:
+Clone the repository, open PowerShell in the repository directory, and run:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
@@ -201,7 +232,7 @@ jupyup --version   # Installed CLI version
 jupyup --force     # Reinstall the latest release
 ```
 
-`jupyup` updates **the CLI installation**, not the Python or Julia dependencies in your projects. It uses published GitHub releases; a development branch is not automatically installed through `jupyup`. To install the current `juuv-ext` checkout, rerun its installer.
+`jupyup` updates **the CLI installation**, not the Python or Julia dependencies in your projects. It uses published GitHub releases; a development branch is not automatically installed through `jupyup`. To install the current `interop` checkout, rerun its installer; `jupyup` only installs published releases.
 
 ## Configuration and troubleshooting
 

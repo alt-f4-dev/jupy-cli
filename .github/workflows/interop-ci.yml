@@ -1,0 +1,165 @@
+name: Interoperability runtime
+on:
+  push:
+    branches: [interop]
+  pull_request:
+    paths: ['python/**', 'julia/**', 'tests/interop/**', '.github/workflows/interop-ci.yml', 'core/**']
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ['3.11', '3.14']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m compileall -q python/jupy tests/interop
+      - run: python -m unittest discover -s tests/interop -p 'test_*.py' -v
+      - run: python -m unittest discover -s tests -p 'test_*.py' -v
+  integration:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ['3.11', '3.14']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.13'
+      - uses: julia-actions/cache@v2
+      - run: python -m pip install -e ./python
+      - name: Provision Julia test project
+        shell: bash
+        run: |
+          julia --startup-file=no --project=tests/interop/julia-project -e 'using Pkg; Pkg.add(PackageSpec(name="PythonCall", version="0.9.37")); Pkg.develop(path=abspath("julia/Jupy")); Pkg.instantiate()'
+      - name: Python hosted Julia
+        run: python tests/interop/smoke_python_to_julia.py
+      - name: Bind PythonCall to active Python interpreter
+        shell: bash
+        run: |
+          echo "JULIA_PYTHONCALL_EXE=$(python -c 'import sys; print(sys.executable)')" >> "$GITHUB_ENV"
+      - name: Julia hosted Python
+        shell: bash
+        env:
+          JULIA_CONDAPKG_BACKEND: 'Null'
+        run: julia --startup-file=no --project=tests/interop/julia-project tests/interop/smoke_julia_to_python.jl
+
+  cli-installation:
+    name: CLI setup (${{ matrix.backend }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [jupy, juuv]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.13'
+      - uses: julia-actions/cache@v2
+      - uses: astral-sh/setup-uv@v5
+      - name: Provision via CLI entry point
+        shell: bash
+        env:
+          BACKEND: ${{ matrix.backend }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/jupy-interop-probe"
+          cd "$RUNNER_TEMP/jupy-interop-probe"
+          python "$GITHUB_WORKSPACE/core/jupy_core.py" "$BACKEND" --jupy-interop-setup
+      - name: Assert package setup and persistence
+        shell: bash
+        env:
+          BACKEND: ${{ matrix.backend }}
+        run: |
+          cd "$RUNNER_TEMP/jupy-interop-probe"
+          test -f .jupy-interop/python/jupy/runtime.py
+          test -f .jupy-interop/julia/Jupy/src/Jupy.jl
+          if [ "$BACKEND" = juuv ]; then
+            test -f uv.lock
+            test ! -f requirements.txt
+          else
+            test -f requirements.txt
+          fi
+          .venv/bin/python -c "import jupy; from pathlib import Path; m=jupy.load('ExampleInterop', path=Path('$GITHUB_WORKSPACE/tests/interop/ExampleInterop.jl')); assert m.increment(7)==8; assert m.increment(8)==9; assert m.calls()==2; assert jupy.julia.initialized"
+          python "$GITHUB_WORKSPACE/core/jupy_core.py" "$BACKEND" -e 'using Jupy; @assert Jupy.load("sys") === Jupy.load("sys")'
+      - name: Verify reruns and relocation
+        shell: bash
+        env:
+          BACKEND: ${{ matrix.backend }}
+        run: |
+          cd "$RUNNER_TEMP/jupy-interop-probe"
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          paths = ["Project.toml", "Manifest.toml", "pyproject.toml", "uv.lock", "requirements.txt"]
+          content = {p: hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in paths if Path(p).is_file()}
+          Path(".setup-hashes").write_text(repr(content))
+          PY
+          python "$GITHUB_WORKSPACE/core/jupy_core.py" "$BACKEND" --jupy-interop-setup
+          python - <<'PY'
+          import ast, hashlib
+          from pathlib import Path
+          previous = ast.literal_eval(Path(".setup-hashes").read_text())
+          for name, digest in previous.items():
+              assert hashlib.sha256(Path(name).read_bytes()).hexdigest() == digest, f"setup changed {name}"
+          PY
+          cd "$RUNNER_TEMP"
+          mv jupy-interop-probe jupy-interop-relocated
+          rm -rf jupy-interop-relocated/.venv
+          cd jupy-interop-relocated
+          python "$GITHUB_WORKSPACE/core/jupy_core.py" "$BACKEND" --jupy-interop-setup
+          .venv/bin/python -c "import jupy; from pathlib import Path; m=jupy.load('ExampleInterop', path=Path('$GITHUB_WORKSPACE/tests/interop/ExampleInterop.jl')); assert m.increment(10)==11"
+          python "$GITHUB_WORKSPACE/core/jupy_core.py" "$BACKEND" -e 'using Jupy; @assert Jupy.load("sys") === Jupy.load("sys")'
+
+  performance-baseline:
+    name: Baseline direct bridges vs Jupy
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.13'
+      - uses: julia-actions/cache@v2
+      - run: python -m pip install -e ./python
+      - name: Provision matching Julia project
+        shell: bash
+        run: |
+          julia --startup-file=no --project=tests/interop/julia-project -e 'using Pkg; Pkg.add(PackageSpec(name="PythonCall", version="0.9.37")); Pkg.develop(path=abspath("julia/Jupy")); Pkg.instantiate()'
+      - name: Measure direct JuliaCall versus Jupy
+        run: python benchmarks/interop_baseline.py --project tests/interop/julia-project --output benchmark-results/python-julia.json
+      - name: Bind PythonCall to runner Python
+        shell: bash
+        run: echo "JULIA_PYTHONCALL_EXE=$(python -c 'import sys; print(sys.executable)')" >> "$GITHUB_ENV"
+      - name: Measure direct PythonCall versus Jupy
+        shell: bash
+        env:
+          JULIA_CONDAPKG_BACKEND: 'Null'
+        run: julia --startup-file=no --project=tests/interop/julia-project benchmarks/interop_baseline.jl benchmark-results/julia-python.csv
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: interop-phase1-baseline
+          path: benchmark-results/
+          if-no-files-found: warn

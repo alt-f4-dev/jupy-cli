@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence
 
 TOOL_VERSION = "0.0.3"
@@ -467,6 +468,138 @@ def run_jupy(root: Path, julia: str, venv_python: Path, arguments: Sequence[str]
     return normalize_return_code(result.returncode)
 
 
+def _interop_sources(source_root: Path) -> tuple[Path, Path]:
+    python_src = source_root / "python"
+    julia_src = source_root / "julia" / "Jupy"
+    if not (python_src / "pyproject.toml").is_file() or not (julia_src / "Project.toml").is_file():
+        raise JupyError(
+            f"interop package sources are unavailable at {source_root}; "
+            "install from the interop checkout or set JUPY_INTEROP_SOURCE"
+        )
+    return python_src, julia_src
+
+
+def _interop_pythoncall_version(python_src: Path) -> str:
+    """Read the JuliaCall pin from the Python package, not a second hardcoded pin."""
+    try:
+        data = tomllib.loads((python_src / "pyproject.toml").read_text(encoding="utf-8"))
+        dependencies = data["project"]["dependencies"]
+    except (OSError, KeyError, TypeError, tomllib.TOMLDecodeError) as exc:
+        raise JupyError(f"invalid interop Python package metadata: {exc}") from exc
+    pins = [item.split("==", 1)[1] for item in dependencies
+            if isinstance(item, str) and item.lower().startswith("juliacall==")]
+    if len(pins) != 1:
+        raise JupyError("interop Python package must declare exactly one pinned juliacall== version")
+    return pins[0]
+
+
+def check_interop_dependencies(root: Path, python_src: Path) -> None:
+    """Reject incompatible pre-existing Julia project resolutions before mutation."""
+    expected = _interop_pythoncall_version(python_src)
+    for manifest in (root / "Manifest.toml", *sorted(root.glob("Manifest-v*.toml"))):
+        if not manifest.is_file():
+            continue
+        try:
+            data = tomllib.loads(manifest.read_text(encoding="utf-8"))
+        except (OSError, tomllib.TOMLDecodeError) as exc:
+            raise JupyError(f"invalid Julia manifest {manifest}: {exc}") from exc
+        resolved = data.get("deps", {}).get("PythonCall")
+        if resolved is None:
+            continue
+        if isinstance(resolved, list):
+            versions = {dep.get("version") for dep in resolved if isinstance(dep, dict)}
+        elif isinstance(resolved, dict):
+            versions = {resolved.get("version")}
+        else:
+            raise JupyError(f"invalid PythonCall entry in {manifest}")
+        versions.discard(None)
+        if versions and versions != {expected}:
+            raise JupyError(
+                f"{manifest} resolves PythonCall {sorted(versions)} but "
+                f"jupy-interop requires {expected}; resolve the conflict explicitly"
+            )
+
+
+def _check_vendored_source(src: Path, dst: Path) -> None:
+    """Refuse silent overwrites or upgrades of project-local interface sources."""
+    if dst.is_symlink() or not dst.is_dir():
+        raise JupyError(f"invalid vendored interop directory: {dst}")
+    for original in src.rglob("*"):
+        if not original.is_file():
+            continue
+        relative = original.relative_to(src)
+        if "__pycache__" in relative.parts or any(part.endswith(".egg-info") for part in relative.parts):
+            continue
+        if original.suffix == ".pyc":
+            continue
+        candidate = dst / relative
+        if candidate.is_symlink() or not candidate.is_file() or candidate.read_bytes() != original.read_bytes():
+            raise JupyError(
+                f"vendored interop source differs from installed version: {candidate}; "
+                "preserve local edits and explicitly migrate the project before upgrading"
+            )
+
+
+def install_interop(root: Path, julia: str, python: Path, program: str) -> None:
+    """Explicit, reproducible provisioning. No silent source or version updates."""
+    source_root = Path(os.environ.get(
+        "JUPY_INTEROP_SOURCE", str(Path(__file__).resolve().parent.parent)
+    )).expanduser().resolve()
+    python_src, julia_src = _interop_sources(source_root)
+    destination = root / ".jupy-interop"
+    py_dst = destination / "python"
+    jl_dst = destination / "julia" / "Jupy"
+
+    marker = root / ".venv" / ".jupy-backend"
+    backend = marker.read_text(encoding="utf-8").strip() if marker.is_file() else ""
+    if program == "jupy" and backend == "uv":
+        raise JupyError("cannot install pip-backed interop inside a uv-managed project")
+    if program == "juuv" and backend not in {"", "uv"}:
+        raise JupyError(f"cannot install uv-backed interop inside {backend}-managed project")
+
+    # All possible file/manifest conflicts are checked before modifying a project.
+    check_interop_dependencies(root, python_src)
+    if destination.is_symlink():
+        raise JupyError(f"interop project directory cannot be a symlink: {destination}")
+    for src, dst in ((python_src, py_dst), (julia_src, jl_dst)):
+        if dst.exists() or dst.is_symlink():
+            _check_vendored_source(src, dst)
+
+    destination.mkdir(parents=True, exist_ok=True)
+    for src, dst in ((python_src, py_dst), (julia_src, jl_dst)):
+        if not dst.exists():
+            shutil.copytree(src, dst, ignore=shutil.ignore_patterns(
+                "__pycache__", "*.pyc", ".pytest_cache", "*.egg-info"
+            ))
+
+    if program == "juuv":
+        command = [find_uv(), "add", "--editable", "./.jupy-interop/python"]
+    else:
+        command = [str(python), "-m", "pip", "install", "-e", str(py_dst)]
+    if run_checked(command, cwd=root).returncode != 0:
+        raise JupyError("failed to install the Python interoperability package")
+    julia_code = (
+        "using Pkg; "
+        "Pkg.activate(ARGS[1]); "
+        "Pkg.develop(path=ARGS[2]); "
+        "Pkg.instantiate()"
+    )
+    if run_checked(
+        [julia, "--startup-file=no", "--history-file=no", "-e",
+         julia_code, str(root), ".jupy-interop/julia/Jupy"],
+        cwd=root,
+        env=pythoncall_environment(),
+    ).returncode != 0:
+        raise JupyError(
+            "failed to install the Julia interoperability package; "
+            "Python setup may have completed and should be inspected"
+        )
+    if program != "juuv":
+        sync_requirements(root, python, program)
+    atomic_write_text(state_file(root), julia_environment_fingerprint(root) + "\n")
+    log(program, "interop runtime installed; Julia and Python project dependencies updated")
+
+
 def usage() -> str:
     return (
         "usage: jupy_core.py {jupy|jupip|juuv} [arguments...]\n"
@@ -517,6 +650,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
         julia = find_julia()
         ensure_julia_project(root, julia, program)
+        if arguments == ["--jupy-interop-setup"]:
+            install_interop(root, julia, venv_python, program)
+            return 0
         return run_jupy(root, julia, venv_python, arguments, program)
     except JupyError as exc:
         log(program, str(exc))
