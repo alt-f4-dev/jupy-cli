@@ -62,5 +62,65 @@ class SetupTests(unittest.TestCase):
             self.assertFalse((root / ".jupy-interop").exists())
 
 
+    def test_idempotent_setup_preserves_vendored_sources(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "Project.toml").touch()
+            (root / ".venv").mkdir()
+            calls = []
+            def run(cmd, **kwargs):
+                calls.append(cmd)
+                return type("Result", (), {"returncode": 0})()
+            with patch.object(core, "run_checked", side_effect=run), \
+                 patch.object(core, "sync_requirements"), \
+                 patch.dict(core.os.environ, {"JUPY_INTEROP_SOURCE": str(ROOT)}):
+                core.install_interop(root, "julia", root / ".venv" / "python", "jupy")
+                source = root / ".jupy-interop" / "python" / "jupy" / "runtime.py"
+                first = source.read_bytes()
+                core.install_interop(root, "julia", root / ".venv" / "python", "jupy")
+                self.assertEqual(source.read_bytes(), first)
+                self.assertEqual(len(calls), 4)
+                source.write_text("local edits", encoding="utf-8")
+                with self.assertRaisesRegex(core.JupyError, "vendored interop source differs"):
+                    core.install_interop(root, "julia", root / ".venv" / "python", "jupy")
+                self.assertEqual(len(calls), 4)
+
+    def test_rejects_incompatible_julia_manifest_before_writes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "Manifest.toml").write_text(
+                '[[deps.PythonCall]]\nversion = "0.9.36"\n',
+                encoding="utf-8",
+            )
+            with patch.dict(core.os.environ, {"JUPY_INTEROP_SOURCE": str(ROOT)}):
+                with self.assertRaisesRegex(core.JupyError, "requires 0.9.37"):
+                    core.install_interop(root, "julia", root / "python", "jupy")
+            self.assertFalse((root / ".jupy-interop").exists())
+
+    def test_rejects_pip_setup_for_uv_owned_project(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            venv = root / ".venv"
+            venv.mkdir()
+            (venv / ".jupy-backend").write_text("uv\n")
+            with patch.dict(core.os.environ, {"JUPY_INTEROP_SOURCE": str(ROOT)}):
+                with self.assertRaisesRegex(core.JupyError, "uv-managed"):
+                    core.install_interop(root, "julia", venv / "python", "jupy")
+            self.assertFalse((root / ".jupy-interop").exists())
+
+    def test_vendored_file_integrity_preflight_catches_missing_files(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / ".venv").mkdir()
+            with patch.object(core, "run_checked") as run, \
+                 patch.object(core, "sync_requirements"), \
+                 patch.dict(core.os.environ, {"JUPY_INTEROP_SOURCE": str(ROOT)}):
+                run.return_value.returncode = 0
+                core.install_interop(root, "julia", root / ".venv" / "python", "jupy")
+                (root / ".jupy-interop" / "julia" / "Jupy" / "src" / "Jupy.jl").unlink()
+                with self.assertRaisesRegex(core.JupyError, "vendored interop source differs"):
+                    core.install_interop(root, "julia", root / ".venv" / "python", "jupy")
+                self.assertEqual(run.call_count, 2)
+
 if __name__ == "__main__":
     unittest.main()
