@@ -1,0 +1,76 @@
+# Conformance of Julia's contract engine with the Python TOML fixtures.
+using Jupy
+using PythonCall
+using Test
+
+const root = normpath(joinpath(@__DIR__, "..", "contracts"))
+contract(name) = Jupy.read_contract(joinpath(root, name * ".toml"))
+
+@testset "Portable contracts and zero-wrapper specialization" begin
+    c = contract("increment")
+    @test c.identity == "examples.increment"
+    @test c.version == "1.0.0"
+    @test length(c.inputs) == 1
+    @test_throws Jupy.ContractError contract("malformed")
+
+    increment(x) = x + 1
+    @test Jupy.bind(increment, c; mode=:trusted) === increment
+    @test_throws Jupy.ContractError Jupy.bind(increment, c; mode=:static)
+    bound = Jupy.bind(increment, c)
+    @test bound(4) == 5
+    @test_throws Jupy.ContractViolation bound(true)
+    @test_throws Jupy.ContractViolation bound(4, 5)
+end
+
+@testset "Shape and dimension binding" begin
+    c = contract("structural")
+    f(n, matrix) = n + 1
+    bound = Jupy.bind(f, c)
+    @test bound(2, ones(Float64, 6, 6)) == 3
+    @test_throws Jupy.ContractViolation bound(3, ones(Float64, 6, 6))
+    @test_throws Jupy.ContractViolation bound(2, ones(Float32, 6, 6))
+    @test_throws Jupy.ContractViolation bound(2, ones(Float64, 6, 3))
+end
+
+@testset "Numerical preconditions and postconditions" begin
+    c = contract("numeric")
+    @test_throws Jupy.ContractError Jupy.bind(x -> 1.0, c; mode=:structural)
+    f(a) = Float64(a[1,1] + a[2,2])
+    bound = Jupy.bind(f, c; mode=:strict)
+    @test bound([1.0 2.0; 2.0 3.0]) == 4.0
+    @test_throws Jupy.ContractViolation bound([1.0 2.0; 3.0 4.0])
+    @test_throws Jupy.ContractViolation bound([Inf 0.0; 0.0 3.0])
+    @test_throws Jupy.ContractViolation Jupy.bind(x -> NaN, c; mode=:strict)([1.0 0.0; 0.0 1.0])
+end
+
+@testset "Registry, collision handling, compatibility" begin
+    c = contract("increment")
+    r = Jupy.Registry()
+    f(x) = x + 1
+    bound = Jupy.register(c.identity, f; contract=c, into=r)
+    @test Jupy.resolve(c.identity; from=r) === bound
+    @test Jupy.describe(c.identity; from=r) === c
+    @test_throws Jupy.ContractError Jupy.register(c.identity, f; contract=c, into=r)
+    c2 = Jupy.Contract(Dict(
+        "schema_version" => 1,
+        "function" => Dict("id" => c.identity, "version" => "1.0.1",
+            "language" => "julia", "module" => "ExampleInterop", "symbol" => "increment"),
+        "inputs" => [Dict("name" => "value", "kind" => "integer")],
+        "output" => Dict("name" => "result", "kind" => "integer"),
+        "execution" => Dict("purity" => "impure")
+    ))
+    @test Jupy.compatibility(c, c2)
+    Jupy.register(c.identity, f; contract=c2, into=r)
+    @test_throws Jupy.ContractError Jupy.resolve(c.identity; from=r)
+    @test Jupy.resolve(c.identity; version="1.0.1", from=r)(10) == 11
+end
+
+@testset "Contracted PythonCall function" begin
+    c = contract("float")
+    python_math = Jupy.load("math")
+    wrapped = Jupy.bind(python_math.sqrt, c; mode=:strict)
+    @test PythonCall.pyconvert(Float64, wrapped(9.0)) == 3.0
+    @test_throws Jupy.ContractViolation wrapped(Inf)
+end
+
+println("Julia Phase 2 contracts: parser, specialization, schemas, registry, and Python calls passed")
