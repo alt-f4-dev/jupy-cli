@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .runtime import JuliaRuntime, RuntimeConfigurationError, julia
+from .contracts import Contract, ContractError, ContractViolation, Registry, read_contract, bind, register, resolve, compatibility
 
 
 def load(name: str, *, path: str | Path | None = None) -> Any:
@@ -17,4 +18,4 @@ def load(name: str, *, path: str | Path | None = None) -> Any:
     return julia.load(name, path=path)
 
 
-__all__ = ["JuliaRuntime", "RuntimeConfigurationError", "julia", "load"]
+__all__ = ["JuliaRuntime", "RuntimeConfigurationError", "julia", "load", "Contract", "ContractError", "ContractViolation", "Registry", "read_contract", "bind", "register", "resolve", "compatibility"]
