@@ -196,8 +196,6 @@ def _shape_and_dtype(value: Any, where: str) -> tuple[tuple[int, ...], str]:
         raise ContractViolation(f"{where}: negative dimension")
     dtype_name = str(dtype).lower()
     # No conversion, synchronization, or copy is permitted by validation.
-    if dtype_name not in _DTYPES:
-        raise ContractViolation(f"{where}: unsupported dtype {dtype_name}")
     return dims, dtype_name
 
 
