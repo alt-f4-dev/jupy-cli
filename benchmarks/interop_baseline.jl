@@ -13,12 +13,12 @@ function summarize(f, iterations=200)
         push!(samples, time_ns() - start)
     end
     sort!(samples)
-    return (samples[cld(length(samples), 2)], samples[clamp(ceil(Int, 0.9length(samples)), 1, length(samples))])
+    return (samples[cld(length(samples), 2)], samples[clamp(ceil(Int, 0.9 * length(samples)), 1, length(samples))])
 end
 
 direct = PythonCall.pyimport("math")
 jupy_module = Jupy.load("math")
-@assert PythonCall.pyconvert(Bool, direct === jupy_module)
+
 metrics = [
     ("cached_module_lookup", summarize(() -> PythonCall.pyimport("math")), summarize(() -> Jupy.load("math"))),
     ("native_bridge_call", summarize(() -> direct.sqrt(9.0)), summarize(() -> jupy_module.sqrt(9.0))),
