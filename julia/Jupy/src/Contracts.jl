@@ -6,7 +6,7 @@ import TOML
 import PythonCall
 
 export Contract, ContractError, ContractViolation, read_contract, bind, register,
-       resolve, describe, compatibility, Registry
+       resolve, describe, compatibility, Registry, register_validator
 
 struct ContractError <: Exception
     message::String
@@ -45,6 +45,7 @@ struct Spec
     shape::Vector{Dimension}
     finite::Bool
     symmetric::Bool
+    validators::Vector{String}
 end
 
 const _TYPES = Set(["integer", "float", "boolean", "array"])
@@ -52,7 +53,7 @@ const _DTYPES = Set(["float32", "float64", "int32", "int64", "bool"])
 
 function make_spec(raw; output=false)
     raw isa AbstractDict || throw(ContractError("spec must be a table"))
-    issubset(Set(keys(raw)), Set(["name", "kind", "dtype", "shape", "finite", "symmetric"])) ||
+    issubset(Set(keys(raw)), Set(["name", "kind", "dtype", "shape", "finite", "symmetric", "validators"])) ||
         throw(ContractError("unknown spec fields"))
     name = get(raw, "name", output ? "result" : "")
     name isa AbstractString && occursin(r"^[A-Za-z_][A-Za-z_0-9]*$", name) ||
@@ -77,8 +78,13 @@ function make_spec(raw; output=false)
         throw(ContractError("finiteness requires numeric kind"))
     symmetric && !(kind == "array" && length(dimensions) == 2) &&
         throw(ContractError("symmetry requires rank-2 array"))
+    validators = get(raw, "validators", String[])
+    validators isa Vector && all(v -> v isa AbstractString &&
+        occursin(r"^[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*$", v), validators) &&
+        length(unique(validators)) == length(validators) ||
+        throw(ContractError("validators must be unique qualified identifiers"))
     return Spec(String(name), String(kind), isnothing(dtype) ? nothing : String(dtype),
-                [dimension(d) for d in dimensions], finite, symmetric)
+                [dimension(d) for d in dimensions], finite, symmetric, String.(validators))
 end
 
 struct Contract
@@ -186,7 +192,35 @@ function native_scalar(value)
     return value
 end
 
-function validate!(s::Spec, raw, dimensions::Dict{String,Int}, where::String, strict::Bool)
+const _validator_lock = ReentrantLock()
+const _validators = Dict{String, Any}()
+
+function register_validator(identity::AbstractString, f)
+    key = String(identity)
+    occursin(r"^[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*$", key) ||
+        throw(ContractError("invalid validator identity"))
+    lock(_validator_lock) do
+        haskey(_validators, key) && throw(ContractError("validator already registered: " * key))
+        _validators[key] = f
+    end
+    return nothing
+end
+
+function compile_validators(spec::Spec)
+    return lock(_validator_lock) do
+        [get(_validators, key) do
+            throw(ContractError("validator not registered: " * key))
+        end for key in spec.validators]
+    end
+end
+
+function run_validators(validators, value, where::String)
+    for validator in validators
+        validator(value) === true || throw(ContractViolation("$where: custom validator rejected value"))
+    end
+end
+
+function validate!(s::Spec, raw, dimensions::Dict{String,Int}, where::String, strict::Bool, validators=Any[])
     if s.kind == "array"
         raw isa AbstractArray || throw(ContractViolation("$where: expected Julia AbstractArray"))
         if !isnothing(s.dtype)
@@ -205,6 +239,7 @@ function validate!(s::Spec, raw, dimensions::Dict{String,Int}, where::String, st
         if strict && s.finite
             all(isfinite, raw) || throw(ContractViolation("$where: nonfinite entries"))
         end
+        strict && run_validators(validators, raw, where)
         return
     end
     value = native_scalar(raw)
@@ -218,6 +253,7 @@ function validate!(s::Spec, raw, dimensions::Dict{String,Int}, where::String, st
     end
     strict && s.finite && !isfinite(value) &&
         throw(ContractViolation("$where: nonfinite scalar"))
+    strict && run_validators(validators, value, where)
 end
 
 function bind(f, c::Contract; mode::Symbol=:structural)
@@ -227,22 +263,25 @@ function bind(f, c::Contract; mode::Symbol=:structural)
     mode === :static && throw(ContractError(
         "runtime obligations cannot be proven statically; use trusted explicitly"
     ))
-    mode === :structural && any(s.finite || s.symmetric for s in [c.inputs; c.output]) &&
+    mode === :structural && any(s.finite || s.symmetric || !isempty(s.validators) for s in [c.inputs; c.output]) &&
         throw(ContractError("numerical predicates require strict validation"))
     # Contract descriptors were resolved at bind time; the hot path does not
     # inspect TOML or evaluate expressions dynamically.
     inputs = c.inputs
     output = c.output
     strict = mode === :strict
+    input_validators = strict ? [compile_validators(spec) for spec in inputs] : Any[]
+    output_validators = strict ? compile_validators(output) : Any[]
     function checked(args...; kwargs...)
         isempty(kwargs) || throw(ContractViolation("contracted calls are positional"))
         length(args) == length(inputs) || throw(ContractViolation("argument arity mismatch"))
         symbols = Dict{String, Int}()
         for i in eachindex(inputs)
-            validate!(inputs[i], args[i], symbols, "argument $(inputs[i].name)", strict)
+            validate!(inputs[i], args[i], symbols, "argument $(inputs[i].name)", strict,
+                      strict ? input_validators[i] : Any[])
         end
         result = f(args...)
-        validate!(output, result, symbols, "result", strict)
+        validate!(output, result, symbols, "result", strict, output_validators)
         return result
     end
     return checked
@@ -252,9 +291,10 @@ mutable struct Registry
     lock::ReentrantLock
     entries::Dict{Tuple{String, String}, Any}
     contracts::Dict{Tuple{String, String}, Contract}
+    versions::Dict{String, Set{String}}
 end
 Registry() = Registry(ReentrantLock(), Dict{Tuple{String,String},Any}(),
-                      Dict{Tuple{String,String},Contract}())
+                      Dict{Tuple{String,String},Contract}(), Dict{String,Set{String}}())
 
 const registry = Registry()
 
@@ -266,30 +306,36 @@ function register(identity::AbstractString, f; contract::Contract, mode::Symbol=
         haskey(into.entries, key) && throw(ContractError("registration collision"))
         into.entries[key] = wrapped
         into.contracts[key] = contract
+        push!(get!(into.versions, String(identity), Set{String}()), contract.version)
     end
     return wrapped
 end
 
-function _registry_key(identity::AbstractString, version, keys)
-    candidates = filter(k -> k[1] == identity && (isnothing(version) || k[2] == version), collect(keys))
-    length(candidates) == 1 || throw(ContractError("registry resolution ambiguous or missing"))
-    return only(candidates)
+function _registry_key(identity::AbstractString, version, registry::Registry)
+    if !isnothing(version)
+        key = (String(identity), String(version))
+        haskey(registry.entries, key) || throw(ContractError("registered contract not found"))
+        return key
+    end
+    versions = get(registry.versions, String(identity), Set{String}())
+    length(versions) == 1 || throw(ContractError("registry resolution ambiguous or missing"))
+    return (String(identity), only(versions))
 end
 
 function resolve(identity::AbstractString; version=nothing, from::Registry=registry)
     lock(from.lock) do
-        return from.entries[_registry_key(identity, version, keys(from.entries))]
+        return from.entries[_registry_key(identity, version, from)]
     end
 end
 function describe(identity::AbstractString; version=nothing, from::Registry=registry)
     lock(from.lock) do
-        return from.contracts[_registry_key(identity, version, keys(from.contracts))]
+        return from.contracts[_registry_key(identity, version, from)]
     end
 end
 
 function _spec_key(s::Spec)
     return (s.kind, s.dtype,
-            [(d.factor, d.symbol, d.constant) for d in s.shape], s.finite, s.symmetric)
+            [(d.factor, d.symbol, d.constant) for d in s.shape], s.finite, s.symmetric, s.validators)
 end
 function compatibility(a::Contract, b::Contract)
     return a.identity == b.identity && a.purity == b.purity &&
