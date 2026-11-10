@@ -13,9 +13,21 @@ from .runtime import JuliaRuntime, RuntimeConfigurationError, julia
 from .contracts import Contract, ContractError, ContractViolation, Registry, read_contract, bind, register, resolve, compatibility
 
 
+
+def bind_contract(contract: Contract | str | Path, *,
+                  path: str | Path | None = None, mode: str = "structural") -> Any:
+    """Resolve the declared Julia callable, register it, and return a bound callable."""
+    specification = contract if isinstance(contract, Contract) else read_contract(contract)
+    if specification.language != "julia":
+        raise ContractError("Python-hosted Jupy contracts must target Julia")
+    module = load(specification.module, path=path)
+    target = getattr(module, specification.symbol)
+    return register(specification.identity, target, contract=specification, mode=mode)
+
+
 def load(name: str, *, path: str | Path | None = None) -> Any:
     """Load a Julia module using the process-global Julia runtime."""
     return julia.load(name, path=path)
 
 
-__all__ = ["JuliaRuntime", "RuntimeConfigurationError", "julia", "load", "Contract", "ContractError", "ContractViolation", "Registry", "read_contract", "bind", "register", "resolve", "compatibility"]
+__all__ = ["JuliaRuntime", "RuntimeConfigurationError", "julia", "load", "Contract", "ContractError", "ContractViolation", "Registry", "read_contract", "bind", "register", "resolve", "compatibility", "bind_contract"]
