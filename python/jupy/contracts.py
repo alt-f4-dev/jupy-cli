@@ -80,10 +80,11 @@ class Spec:
     shape: tuple[Dimension, ...]
     finite: bool
     symmetric: bool
+    validators: tuple[str, ...]
 
     @classmethod
     def parse(cls, raw: Mapping[str, Any], *, index: int, output: bool = False) -> "Spec":
-        allowed = {"name", "kind", "dtype", "shape", "finite", "symmetric"}
+        allowed = {"name", "kind", "dtype", "shape", "finite", "symmetric", "validators"}
         if not isinstance(raw, dict) or set(raw) - allowed:
             raise ContractError("invalid contract input/output fields")
         name = raw.get("name", "result" if output else None)
@@ -110,7 +111,12 @@ class Spec:
             raise ContractError("finiteness only applies to numeric values")
         if symmetric and (kind != "array" or len(shape) != 2):
             raise ContractError("symmetry requires a rank-2 array")
-        return cls(name, kind, dtype, shape, finite, symmetric)
+        raw_validators = raw.get("validators", [])
+        if not isinstance(raw_validators, list) or any(
+            not isinstance(v, str) or not _ID.fullmatch(v) for v in raw_validators
+        ) or len(set(raw_validators)) != len(raw_validators):
+            raise ContractError("validators must be a list of unique qualified identifiers")
+        return cls(name, kind, dtype, shape, finite, symmetric, tuple(raw_validators))
 
 
 @dataclass(frozen=True)
@@ -174,7 +180,7 @@ class Contract:
 
     @property
     def numeric(self) -> bool:
-        return any(s.finite or s.symmetric for s in (*self.inputs, self.output))
+        return any(s.finite or s.symmetric or s.validators for s in (*self.inputs, self.output))
 
     @property
     def structural(self) -> bool:
@@ -182,7 +188,7 @@ class Contract:
 
     def signature(self) -> tuple[Any, ...]:
         def spec_key(s: Spec) -> tuple[Any, ...]:
-            return (s.kind, s.dtype, s.shape, s.finite, s.symmetric)
+            return (s.kind, s.dtype, s.shape, s.finite, s.symmetric, s.validators)
         return (tuple(spec_key(s) for s in self.inputs), spec_key(self.output), self.purity)
 
 
@@ -226,8 +232,37 @@ def _elements(value: Any, dims: tuple[int, ...]):
     yield from recurse((), 0)
 
 
+_VALIDATOR_LOCK = threading.RLock()
+_VALIDATORS: dict[str, Callable[[Any], bool]] = {}
+
+
+def register_validator(identity: str, predicate: Callable[[Any], bool]) -> None:
+    """Register a local named predicate once. All names are resolved at bind time."""
+    if not isinstance(identity, str) or not _ID.fullmatch(identity) or not callable(predicate):
+        raise ContractError("validator identity and callable are required")
+    with _VALIDATOR_LOCK:
+        if identity in _VALIDATORS:
+            raise ContractError(f"validator already registered: {identity}")
+        _VALIDATORS[identity] = predicate
+
+
+def _compile_validators(spec: Spec) -> tuple[Callable[[Any], bool], ...]:
+    with _VALIDATOR_LOCK:
+        try:
+            return tuple(_VALIDATORS[name] for name in spec.validators)
+        except KeyError as exc:
+            raise ContractError(f"validator not registered: {exc.args[0]}") from exc
+
+
+def _run_validators(validators: tuple[Callable[[Any], bool], ...], value: Any, where: str) -> None:
+    for validator in validators:
+        passed = validator(value)
+        if not isinstance(passed, bool) or not passed:
+            raise ContractViolation(f"{where}: custom validator rejected value")
+
+
 def _check(spec: Spec, value: Any, dimensions: dict[str, int],
-           where: str, strict: bool) -> None:
+           where: str, strict: bool, validators: tuple[Callable[[Any], bool], ...] = ()) -> None:
     if spec.kind == "integer":
         if not isinstance(value, int) or isinstance(value, bool):
             raise ContractViolation(f"{where}: expected integer")
@@ -268,9 +303,13 @@ def _check(spec: Spec, value: Any, dimensions: dict[str, int],
                     raise ContractViolation(f"{where}: nonfinite array element")
             if observed != expected:
                 raise ContractViolation(f"{where}: flat array contains fewer values than shape")
+        if strict:
+            _run_validators(validators, value, where)
         return
     if strict and spec.finite and not math.isfinite(value):
         raise ContractViolation(f"{where}: nonfinite value")
+    if strict:
+        _run_validators(validators, value, where)
 
 
 def bind(function: Callable[..., Any], contract: Contract | str | Path,
@@ -302,6 +341,9 @@ def bind(function: Callable[..., Any], contract: Contract | str | Path,
     # Capture immutable, pre-parsed specifications. No TOML, regex, or
     # expression evaluation is performed in the hot path.
     inputs, output, strict = contract.inputs, contract.output, mode == "strict"
+    # Bind-time resolution eliminates registry access from the hot path.
+    input_validators = tuple(_compile_validators(s) for s in inputs) if strict else ()
+    output_validators = _compile_validators(output) if strict else ()
     count = len(inputs)
 
     @wraps(function)
@@ -309,10 +351,11 @@ def bind(function: Callable[..., Any], contract: Contract | str | Path,
         if kwargs or len(args) != count:
             raise ContractViolation(f"{contract.identity}: expected {count} positional arguments")
         dimensions: dict[str, int] = {}
-        for spec, value in zip(inputs, args):
-            _check(spec, value, dimensions, f"argument {spec.name}", strict)
+        for index, (spec, value) in enumerate(zip(inputs, args)):
+            _check(spec, value, dimensions, f"argument {spec.name}", strict,
+                   input_validators[index] if strict else ())
         result = function(*args)
-        _check(output, result, dimensions, "result", strict)
+        _check(output, result, dimensions, "result", strict, output_validators)
         return result
 
     bound.__jupy_contract__ = contract
@@ -327,6 +370,7 @@ class Registry:
         self._lock = threading.RLock()
         self._entries: dict[tuple[str, str], Callable[..., Any]] = {}
         self._contracts: dict[tuple[str, str], Contract] = {}
+        self._versions: dict[str, set[str]] = {}
 
     def register(self, identity: str, function: Callable[..., Any],
                  *, contract: Contract | str | Path, mode: str = "structural") -> Callable[..., Any]:
@@ -340,23 +384,27 @@ class Registry:
                 raise ContractError(f"contract registration already exists: {key}")
             self._entries[key] = target
             self._contracts[key] = definition
+            self._versions.setdefault(identity, set()).add(definition.version)
         return target
+
+    def _key(self, identity: str, version: str | None) -> tuple[str, str]:
+        if version is not None:
+            key = (identity, version)
+            if key not in self._entries:
+                raise ContractError(f"no registered callable for {identity} {version}")
+            return key
+        versions = self._versions.get(identity, ())
+        if len(versions) != 1:
+            raise ContractError(f"expected one registered callable for {identity} None; found {len(versions)}")
+        return (identity, next(iter(versions)))
 
     def resolve(self, identity: str, *, version: str | None = None) -> Callable[..., Any]:
         with self._lock:
-            matched = [key for key in self._entries
-                       if key[0] == identity and (version is None or key[1] == version)]
-            if len(matched) != 1:
-                raise ContractError(f"expected one registered callable for {identity} {version}; found {len(matched)}")
-            return self._entries[matched[0]]
+            return self._entries[self._key(identity, version)]
 
     def describe(self, identity: str, *, version: str | None = None) -> Contract:
         with self._lock:
-            matched = [key for key in self._contracts
-                       if key[0] == identity and (version is None or key[1] == version)]
-            if len(matched) != 1:
-                raise ContractError(f"expected one contract for {identity} {version}; found {len(matched)}")
-            return self._contracts[matched[0]]
+            return self._contracts[self._key(identity, version)]
 
 
 registry = Registry()
