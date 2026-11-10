@@ -6,7 +6,7 @@ include("Contracts.jl")
 using .Contracts: Contract, ContractError, ContractViolation, read_contract, bind,
                   register, resolve, describe, compatibility, Registry
 
-export Contract, ContractError, ContractViolation, read_contract, bind,
+export Contract, ContractError, ContractViolation, read_contract, bind_contract, bind,
        register, resolve, describe, compatibility, Registry
 
 export python, pyimport, load, PythonRuntime
@@ -81,6 +81,22 @@ function load(name::AbstractString; path::Union{Nothing, AbstractString}=nothing
         end
         return mod
     end
+"""
+    bind_contract(contract; path=nothing, mode=:structural)
+
+Resolve the Python callable declared by a contract once using the Phase 1
+loader, specialize it, and register the callable under its contract identity.
+"""
+function bind_contract(c::Contract; path=nothing, mode::Symbol=:structural)
+    c.language == "python" || throw(ContractError("Julia-hosted contracts must target Python"))
+    module_handle = load(c.module_name; path=path)
+    target = getproperty(module_handle, Symbol(c.symbol))
+    return register(c.identity, target; contract=c, mode=mode)
+end
+bind_contract(path::AbstractString; kwargs...) =
+    bind_contract(read_contract(path); kwargs...)
+
+
 end
 
 """Compatibility alias for the canonical `load` interface."""
