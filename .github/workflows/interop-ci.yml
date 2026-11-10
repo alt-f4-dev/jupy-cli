@@ -1,9 +1,9 @@
 name: Interoperability runtime
 on:
   push:
-    branches: [interop]
+    branches: [interop, interop-contract]
   pull_request:
-    paths: ['python/**', 'julia/**', 'tests/interop/**', '.github/workflows/interop-ci.yml', 'core/**']
+    paths: ['python/**', 'julia/**', 'tests/interop/**', 'tests/contracts/**', 'benchmarks/**', '.github/workflows/interop-ci.yml', 'core/**']
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -52,6 +52,11 @@ jobs:
         shell: bash
         run: |
           echo "JULIA_PYTHONCALL_EXE=$(python -c 'import sys; print(sys.executable)')" >> "$GITHUB_ENV"
+      - name: Phase 2 portable contract conformance (Julia)
+        shell: bash
+        env:
+          JULIA_CONDAPKG_BACKEND: 'Null'
+        run: julia --startup-file=no --project=tests/interop/julia-project tests/interop/test_contracts.jl
       - name: Julia hosted Python
         shell: bash
         env:
