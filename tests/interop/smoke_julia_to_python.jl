@@ -59,7 +59,7 @@ end
 PythonCall.pyimport("json")
 let caught = false
     try
-        Jupy.load("json"; path=source_file)
+        Jupy.load("json"; path=joinpath(@__DIR__, "ExamplePythonInteropHelper.py"))
     catch err
         caught = err isa ArgumentError && occursin("already registered outside Jupy", sprint(showerror, err))
     end
