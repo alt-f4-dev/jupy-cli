@@ -51,6 +51,34 @@ class Phase2Tests(unittest.TestCase):
         with self.assertRaises(ContractError):
             Dimension.parse("-1")
 
+    def test_output_only_symbol_rejected(self):
+        c = read_contract(CONTRACTS / "structural.toml")
+        data = {
+            "schema_version": 1,
+            "function": {
+                "id": c.identity, "version": c.version, "language": c.language,
+                "module": c.module, "symbol": c.symbol,
+            },
+            "inputs": [{"name": "N", "kind": "integer"}],
+            "output": {"name": "result", "kind": "array", "dtype": "float64",
+                       "shape": ["UNBOUND"]},
+        }
+        with self.assertRaisesRegex(ContractError, "not bound"):
+            Contract.from_mapping(data)
+
+    def test_strict_detects_fake_flat_iterator_shorter_than_shape(self):
+        c = read_contract(CONTRACTS / "numeric.toml")
+        class Incomplete:
+            shape = (2, 2)
+            dtype = "float64"
+            @property
+            def flat(self):
+                return iter([1., 2., 2.])
+            def __getitem__(self, ij):
+                return 1.
+        with self.assertRaisesRegex(ContractViolation, "fewer values"):
+            bind(lambda x: 2., c, mode="strict")(Incomplete())
+
     def test_trusted_zero_wrapper_and_static_fail_closed(self):
         c = read_contract(CONTRACTS / "increment.toml")
         f = lambda x: x + 1
