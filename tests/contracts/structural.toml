@@ -1,0 +1,24 @@
+schema_version = 1
+[function]
+id = "examples.matrix_shape"
+version = "1.0.0"
+language = "python"
+module = "example"
+symbol = "shape"
+
+[[inputs]]
+name = "N"
+kind = "integer"
+
+[[inputs]]
+name = "matrix"
+kind = "array"
+dtype = "float64"
+shape = ["3*N", "3*N"]
+
+[output]
+name = "result"
+kind = "integer"
+
+[execution]
+purity = "pure"
