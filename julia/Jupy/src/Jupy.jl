@@ -81,6 +81,8 @@ function load(name::AbstractString; path::Union{Nothing, AbstractString}=nothing
         end
         return mod
     end
+end
+
 """
     bind_contract(contract; path=nothing, mode=:structural)
 
@@ -96,8 +98,6 @@ end
 bind_contract(path::AbstractString; kwargs...) =
     bind_contract(read_contract(path); kwargs...)
 
-
-end
 
 """Compatibility alias for the canonical `load` interface."""
 pyimport(name::AbstractString) = load(name)
