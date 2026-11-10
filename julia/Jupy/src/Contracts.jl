@@ -157,11 +157,11 @@ function native_scalar(value)
     # permits a scalar conversion only; arrays are never materialized implicitly.
     if value isa PythonCall.Py
         builtins = PythonCall.pybuiltins
-        if PythonCall.pyconvert(Bool, PythonCall.pyisinstance(value, builtins.bool))
+        if PythonCall.pyisinstance(value, builtins.bool)
             return PythonCall.pyconvert(Bool, value)
-        elseif PythonCall.pyconvert(Bool, PythonCall.pyisinstance(value, builtins.int))
+        elseif PythonCall.pyisinstance(value, builtins.int)
             return PythonCall.pyconvert(Int, value)
-        elseif PythonCall.pyconvert(Bool, PythonCall.pyisinstance(value, builtins.float))
+        elseif PythonCall.pyisinstance(value, builtins.float)
             return PythonCall.pyconvert(Float64, value)
         end
     end
