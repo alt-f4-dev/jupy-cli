@@ -1,6 +1,5 @@
 # Julia-side structural validation timing. No speedup expectations.
 using Jupy
-using Statistics
 
 contract = Jupy.read_contract(joinpath(@__DIR__, "..", "tests", "contracts", "structural.toml"))
 function compute(n, matrix)
@@ -20,7 +19,8 @@ function measure(f)
         f()
         push!(values, time_ns() - start)
     end
-    return median(values)
+    sort!(values)
+    return values[cld(length(values), 2)]
 end
 
 output = only(ARGS)
