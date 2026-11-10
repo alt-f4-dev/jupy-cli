@@ -1,0 +1,23 @@
+schema_version = 1
+[function]
+id = "examples.symmetric_trace"
+version = "1.0.0"
+language = "julia"
+module = "Example"
+symbol = "trace"
+
+[[inputs]]
+name = "matrix"
+kind = "array"
+dtype = "float64"
+shape = ["N", "N"]
+finite = true
+symmetric = true
+
+[output]
+name = "result"
+kind = "float"
+finite = true
+
+[execution]
+purity = "pure"
