@@ -156,6 +156,14 @@ class Contract:
         if len({item.name for item in inputs}) != len(inputs):
             raise ContractError("argument names must be unique")
         output = Spec.parse(data.get("output"), index=0, output=True)
+        # An output-only symbolic dimension is existential and would accept
+        # any result size. Require every output symbol to be bound by inputs.
+        input_symbols = {argument.name for argument in inputs if argument.kind == "integer"}
+        input_symbols.update(dim.symbol for argument in inputs for dim in argument.shape
+                             if dim.symbol is not None)
+        for dim in output.shape:
+            if dim.symbol is not None and dim.symbol not in input_symbols:
+                raise ContractError(f"output dimension {dim.symbol} is not bound by any input")
         execution = data.get("execution", {"purity": "unknown"})
         if not isinstance(execution, dict) or set(execution) != {"purity"}:
             raise ContractError("execution only supports purity")
@@ -246,13 +254,20 @@ def _check(spec: Spec, value: Any, dimensions: dict[str, int],
                     if value[i, j] != value[j, i]:
                         raise ContractViolation(f"{where}: matrix not symmetric at ({i}, {j})")
         if strict and spec.finite:
+            expected = math.prod(actual)
+            observed = 0
             for item in _elements(value, actual):
+                observed += 1
+                if observed > expected:
+                    raise ContractViolation(f"{where}: flat array contains more values than shape")
                 try:
                     valid = math.isfinite(item)
                 except (TypeError, ValueError) as exc:
                     raise ContractViolation(f"{where}: nonnumeric array element") from exc
                 if not valid:
                     raise ContractViolation(f"{where}: nonfinite array element")
+            if observed != expected:
+                raise ContractViolation(f"{where}: flat array contains fewer values than shape")
         return
     if strict and spec.finite and not math.isfinite(value):
         raise ContractViolation(f"{where}: nonfinite value")
