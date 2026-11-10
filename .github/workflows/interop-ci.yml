@@ -23,6 +23,9 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: python -m compileall -q python/jupy tests/interop
       - run: python -m unittest discover -s tests/interop -p 'test_*.py' -v
+      - name: Contract overhead measurements (Python)
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.14'
+        run: python benchmarks/contract_baseline.py benchmark-results/contract-python.json
       - run: python -m unittest discover -s tests -p 'test_*.py' -v
   integration:
     runs-on: ${{ matrix.os }}
@@ -162,6 +165,13 @@ jobs:
         env:
           JULIA_CONDAPKG_BACKEND: 'Null'
         run: julia --startup-file=no --project=tests/interop/julia-project benchmarks/interop_baseline.jl benchmark-results/julia-python.csv
+      - name: Measure static-first contract overhead (Python)
+        run: python benchmarks/contract_baseline.py benchmark-results/contract-python.json
+      - name: Measure static-first contract overhead (Julia)
+        shell: bash
+        env:
+          JULIA_CONDAPKG_BACKEND: 'Null'
+        run: julia --startup-file=no --project=tests/interop/julia-project benchmarks/contract_baseline.jl benchmark-results/contract-julia.csv
       - uses: actions/upload-artifact@v4
         if: always()
         with:
