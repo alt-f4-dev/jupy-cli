@@ -136,6 +136,24 @@ foreign function. The public registries use (identity, version) keys.
 Colliding registrations fail; resolving without an explicit version fails
 when multiple versions exist. Registries are **process-local**, not remote.
 
+## Named domain-specific validators
+
+An input or output spec may declare `validators = ["myproject.acoustic_sum_rule"]`.
+Both languages expose `register_validator(identity, predicate)`. Named
+predicates must be registered before binding, return a native boolean, and
+are resolved once into the compiled validation plan. Missing names reject
+binding, and duplicate registration is rejected. Validation requires
+`strict` mode; a `trusted` binding delegates all checks instead.
+Application-specific predicates may be O(N) or more expensive and must not
+be represented as constant-time metadata checks. A shared contract identifier
+does not prove that two independently implemented validators have identical
+semantics; conformance testing is required.
+
+The contract registry uses exact (identity, version) dictionary keys.
+With an explicit version, lookup is expected O(1). Omitting the version
+requires a unique registered version and is also resolved from a per-ID
+index rather than scanning every registration.
+
 ## Compatibility and reproducibility
 
 `compatibility(a, b)` compares the same function identity, the exact
