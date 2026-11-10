@@ -29,11 +29,11 @@ def measure(call, n=200):
     return {"median_ns": median(results), "p90_ns": results[int(.9 * (len(results) - 1))]}
 
 
-def cold_start(command: str, env: dict[str, str], repeats=2):
+def cold_start(command: str, env: dict[str, str], cwd: Path, repeats=2):
     results = []
     for _ in range(repeats):
         start = perf_counter_ns()
-        subprocess.run([sys.executable, "-c", command], env=env, check=True,
+        subprocess.run([sys.executable, "-c", command], env=env, cwd=cwd, check=True,
                        stdout=subprocess.DEVNULL)
         results.append((perf_counter_ns() - start) / 1_000_000)
     return results
@@ -45,6 +45,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     project = args.project.resolve()
+    args.output = args.output.resolve()
     executable = shutil.which("julia")
     if not executable or not (project / "Project.toml").is_file():
         raise RuntimeError("Julia executable and initialized Julia project are required")
@@ -54,10 +55,10 @@ def main():
         "PYTHON_JULIACALL_PROJECT": str(project),
     })
     direct_cold = cold_start(
-        "from juliacall import Main; Main.seval('import LinearAlgebra')", env
+        "from juliacall import Main; Main.seval('import LinearAlgebra')", env, project
     )
     jupy_cold = cold_start(
-        "import jupy; jupy.load('LinearAlgebra')", env
+        "import jupy; jupy.load('LinearAlgebra')", env, project
     )
 
     # Both imports use exactly the same Julia project and interpreter.
@@ -66,6 +67,7 @@ def main():
         "PYTHON_JULIACALL_PROJECT": env["PYTHON_JULIACALL_PROJECT"],
     })
     import jupy
+    os.chdir(project)
     jl = jupy.julia.start()
     jl.seval("import LinearAlgebra")
     direct_module = jl.LinearAlgebra
