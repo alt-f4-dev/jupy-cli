@@ -27,4 +27,20 @@ except Exception as exc:
 else:
     raise AssertionError("Julia exception did not propagate")
 assert julia.initialized
-print("Python -> Julia: persistent runtime and state verified")
+# Phase 2 contract resolves an existing Julia module and the underlying callable.
+import jupy
+contracted = jupy.bind_contract(
+    REPO / "tests" / "contracts" / "increment.toml",
+    path=MODULE,
+    mode="structural",
+)
+assert contracted(9) == 10
+assert jupy.resolve("examples.increment", version="1.0.0") is contracted
+try:
+    contracted(True)
+except jupy.ContractViolation:
+    pass
+else:
+    raise AssertionError("cross-language contract did not reject a boolean")
+
+print("Python -> Julia: persistent runtime, function contract and state verified")
