@@ -44,7 +44,7 @@ Both options run Julia with the same Julia project and configure PythonCall to u
 
 The `interop` branch adds the canonical `load()` API in both languages, plus an opt-in runtime facade backed by **JuliaCall** (Python → Julia) and **PythonCall** (Julia → Python), with process-local runtime reuse, deterministic Julia project ownership, and module caching. It does **not** translate source code or implement a replacement low-level bridge. This feature is not included in the v0.0.3 release.
 
-After cloning and installing the `interop` branch, initialize a project using `jupy` or `juuv`, then run exactly one of:
+After cloning the repository, switch to `interop` (`git switch interop`) and run the installer before initializing a project using `jupy` or `juuv`, then run exactly one of:
 
 ```bash
 juuv --jupy-interop-setup  # uv project
@@ -69,7 +69,7 @@ numpy = Jupy.load("numpy")
 result = numpy.asarray([1, 2, 3])
 ```
 
-An embedded Julia runtime is initialized **once per Python process** and reused for subsequent calls. A new shell invocation starts a new process; no persistent cross-process daemon is created. The Julia project/executable cannot be switched once the process has initialized Julia. See [runtime contracts and test instructions](docs/interop-runtime.md).
+An embedded Julia runtime is initialized **once per Python process** and reused for subsequent calls. A new shell invocation starts a new process; no persistent cross-process daemon is created. The Julia project/executable cannot be switched once the process has initialized Julia. See [runtime contracts](docs/interop-runtime.md) and the [Phase 1 stabilization guarantees](docs/phase1-stabilization.md).
 
 ## Commands
 
@@ -103,7 +103,7 @@ The installer does not install Julia, Python, or uv.
 
 ### Linux / macOS
 
-To install the latest source checkout:
+To install the default-branch source checkout (the experimental interop API additionally requires `git switch interop`):
 
 ```bash
 git clone https://github.com/alt-f4-dev/jupy-cli.git
@@ -232,7 +232,7 @@ jupyup --version   # Installed CLI version
 jupyup --force     # Reinstall the latest release
 ```
 
-`jupyup` updates **the CLI installation**, not the Python or Julia dependencies in your projects. It uses published GitHub releases; a development branch is not automatically installed through `jupyup`. To install the current `juuv-ext` checkout, rerun its installer.
+`jupyup` updates **the CLI installation**, not the Python or Julia dependencies in your projects. It uses published GitHub releases; a development branch is not automatically installed through `jupyup`. To install the current `interop` checkout, rerun its installer; `jupyup` only installs published releases.
 
 ## Configuration and troubleshooting
 
