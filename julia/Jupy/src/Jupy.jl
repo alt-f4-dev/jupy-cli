@@ -4,7 +4,7 @@ import PythonCall
 
 include("Contracts.jl")
 using .Contracts: Contract, ContractError, ContractViolation, read_contract, bind,
-                  register, resolve, describe, compatibility, Registry
+                  register, resolve, describe, compatibility, Registry, register_validator
 
 export Contract, ContractError, ContractViolation, read_contract, bind_contract, bind,
        register, resolve, describe, compatibility, Registry
