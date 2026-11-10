@@ -2,6 +2,13 @@ module Jupy
 
 import PythonCall
 
+include("Contracts.jl")
+using .Contracts: Contract, ContractError, ContractViolation, read_contract, bind,
+                  register, resolve, describe, compatibility, Registry
+
+export Contract, ContractError, ContractViolation, read_contract, bind,
+       register, resolve, describe, compatibility, Registry
+
 export python, pyimport, load, PythonRuntime
 
 """Use the process-local Python interpreter initialized by PythonCall."""
