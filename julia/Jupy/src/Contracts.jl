@@ -181,7 +181,7 @@ function validate!(s::Spec, raw, dimensions::Dict{String,Int}, where::String, st
         if strict && s.symmetric
             size(raw, 1) == size(raw, 2) || throw(ContractViolation("$where: expected square matrix"))
             for j in axes(raw, 2), i in 1:j-1
-                isequal(raw[i,j], raw[j,i]) || throw(ContractViolation("$where: asymmetric entries"))
+                raw[i,j] == raw[j,i] || throw(ContractViolation("$where: asymmetric entries"))
             end
         end
         if strict && s.finite
