@@ -118,6 +118,18 @@ function Contract(data::AbstractDict)
     length(unique(s.name for s in inputs)) == length(inputs) ||
         throw(ContractError("duplicate input name"))
     output = make_spec(get(data, "output", nothing); output=true)
+    # Output-only dimension symbols would be unconstrained and are rejected.
+    bound = Set{String}()
+    for arg in inputs
+        arg.kind == "integer" && push!(bound, arg.name)
+        for dim in arg.shape
+            !isnothing(dim.symbol) && push!(bound, dim.symbol)
+        end
+    end
+    for dim in output.shape
+        !isnothing(dim.symbol) && dim.symbol ∉ bound &&
+            throw(ContractError("output dimension symbol was not bound by an input"))
+    end
     execution = get(data, "execution", Dict("purity" => "unknown"))
     execution isa AbstractDict && Set(keys(execution)) == Set(["purity"]) ||
         throw(ContractError("invalid execution properties"))
@@ -138,8 +150,14 @@ function dimension_check!(dim::Dimension, observed::Int, bindings::Dict{String, 
     if !haskey(bindings, symbol)
         observed % dim.factor == 0 || throw(ContractViolation("$where: invalid symbolic dimension"))
         bindings[symbol] = div(observed, dim.factor)
-    elseif observed != dim.factor * bindings[symbol]
-        throw(ContractViolation("$where: symbolic dimension mismatch"))
+    else
+        expected = try
+            Base.checked_mul(dim.factor, bindings[symbol])
+        catch err
+            err isa OverflowError || rethrow()
+            throw(ContractViolation("$where: dimension coefficient overflow"))
+        end
+        observed == expected || throw(ContractViolation("$where: symbolic dimension mismatch"))
     end
 end
 
