@@ -37,6 +37,23 @@ class StabilizationTests(unittest.TestCase):
         executable.touch()
         return runtime.JuliaRuntime(project=root, executable=str(executable))
 
+    def test_default_facade_uses_fast_cached_runtime_but_explicit_facade_validates(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            explicit = self.environment(root)
+            main = types.SimpleNamespace(Example=object())
+            with patch.object(runtime, "_MAIN", main), patch.object(
+                runtime, "_CONFIG", (root.resolve(), (root / "julia").resolve())
+            ), patch.object(runtime, "_resolve_julia", side_effect=AssertionError(
+                "cached default runtime must not resolve Julia again"
+            )), patch.object(runtime, "find_project_root", side_effect=AssertionError(
+                "cached default runtime must not discover its project again"
+            )):
+                self.assertIs(runtime.julia.start(), main)
+                # Explicitly configured clients may not bypass conflict checks.
+                with self.assertRaisesRegex(AssertionError, "must not resolve Julia"):
+                    explicit.start()
+
     def test_failed_native_start_is_poisoned_but_preflight_is_not(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
