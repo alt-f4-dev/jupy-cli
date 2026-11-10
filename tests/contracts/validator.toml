@@ -1,0 +1,19 @@
+schema_version = 1
+[function]
+id = "examples.positive_increment"
+version = "1.0.0"
+language = "julia"
+module = "ExampleInterop"
+symbol = "increment"
+
+[[inputs]]
+name = "value"
+kind = "integer"
+validators = ["examples.positive"]
+
+[output]
+name = "result"
+kind = "integer"
+
+[execution]
+purity = "impure"
