@@ -12,6 +12,14 @@ contract(name) = Jupy.read_contract(joinpath(root, name * ".toml"))
     @test c.version == "1.0.0"
     @test length(c.inputs) == 1
     @test_throws Jupy.ContractError contract("malformed")
+    @test_throws Jupy.ContractError Jupy.Contract(Dict(
+        "schema_version" => 1,
+        "function" => Dict("id" => "examples.unbound", "version" => "1.0.0",
+            "language" => "julia", "module" => "Example", "symbol" => "f"),
+        "inputs" => [Dict("name" => "N", "kind" => "integer")],
+        "output" => Dict("name" => "result", "kind" => "array",
+                         "dtype" => "float64", "shape" => ["UNBOUND"])
+    ))
 
     increment(x) = x + 1
     @test Jupy.bind(increment, c; mode=:trusted) === increment
