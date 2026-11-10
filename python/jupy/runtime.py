@@ -67,6 +67,11 @@ class JuliaRuntime:
                 raise RuntimeConfigurationError(
                     "a previous JuliaCall initialization failed; restart the Python process"
                 )
+            # The process-global runtime cannot change configuration after startup.
+            # Cached default-facade calls therefore need no disk, PATH, or project
+            # discovery work. Explicitly configured facades still validate conflicts.
+            if _CONFIG is not None and self._project is None and self._executable is None:
+                return _MAIN
             project = self._project or (_CONFIG[0] if _CONFIG else find_project_root())
             if not (project / "Project.toml").is_file() and not (project / "JuliaProject.toml").is_file():
                 raise RuntimeConfigurationError(
