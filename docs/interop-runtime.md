@@ -1,6 +1,6 @@
 # Interop runtime — milestone 1
 
-Status: experimental; not released. This is an additive prototype on the `interop` branch. Existing `jupy`, `jupip`, `juuv`, and `jupyup` commands remain unchanged.
+Status: experimental; not released. This extends the CLI setup without changing default script execution or the semantics of existing commands. See [Phase 1 stabilization and API freeze](phase1-stabilization.md) for supported guarantees and limitations.
 
 ## Canonical API
 
@@ -15,7 +15,7 @@ Provide native bidirectional calls between Python and Julia, with Julia initiali
 - A Python host uses `jupy.JuliaRuntime`, backed by JuliaCall; Julia is loaded lazily at first `start()` or `import_module()`.
 - JuliaCall's `PYTHON_JULIACALL_EXE` and `PYTHON_JULIACALL_PROJECT` must both reference the existing Julia project before importing `juliacall`. This explicitly disables JuliaPkg's separate project selection.
 - The Python process retains one embedded Julia runtime for its lifetime. `JuliaRuntime` caches loaded module handles; JuliaCall governs interpreter lifetime. Runtime shutdown/reinitialization is not supported.
-- A Julia host uses `Jupy.pyimport`, backed by PythonCall and its existing `.venv` binding. Imported Python modules are cached per Julia process.
+- A Julia host uses `Jupy.load`, backed by PythonCall and its existing `.venv` binding. Imported Python modules are cached per Julia process.
 - Both directions preserve native module/function behavior and propagate underlying exceptions.
 - Loading packages and compiling Julia methods can still incur first-use costs. The contract does not promise that every call is compilation-free.
 - JuliaCall and PythonCall are alternative **host directions** of the same underlying PythonCall ecosystem, not separate concurrently managed runtimes. In particular, this prototype does not promise safe independent initialization in a process that already embeds the other language.
@@ -34,7 +34,7 @@ This explicitly vendors the experimental interop Python and Julia packages into 
 
 The setup command is experimental on the `interop` branch and is **not available in the published v0.0.3 release**. Install this branch's CLI to test it. The command modifies the current project's `pyproject.toml`/`uv.lock` or pip requirements and Julia `Project.toml`/`Manifest.toml`; review the changes before committing.
 
-Running the setup command again reuses existing vendored sources, including user modifications; it does not automatically upgrade them. Use a new project or explicitly manage the vendored package version to upgrade.
+Running setup again reuses unchanged vendored sources. If those sources were edited or differ from the current installed version, setup fails before dependency installation instead of overwriting them. Resolve upgrades explicitly. PythonCall must match the pinned JuliaCall version in an existing Julia manifest. Relocation requires recreating `.venv` and rerunning setup.
 
 The Python host obtains an embedded Julia runtime once per Python process. Distinct command invocations do not share process state. The Julia host similarly reuses one embedded Python interpreter through PythonCall. The interpreter/project binding is immutable after initialization. Run with the project's interpreter through `jupy <script.py>` or `juuv <script.py>`, and run Julia scripts with `jupy <script.jl>` or `juuv <script.jl>`.
 
@@ -58,7 +58,7 @@ assert jupy.julia.initialized
 assert solver is jupy.load("LatticeSolver")
 ```
 
-`import_module("LinearAlgebra")` imports a Julia package available to the active project without an explicit source path. This experimental API only accepts a single Julia module identifier.
+`jupy.load("LinearAlgebra")` imports a Julia package available to the active project without an explicit source path. This experimental API only accepts a single Julia module identifier.
 
 ## Installation and example — Julia host
 
