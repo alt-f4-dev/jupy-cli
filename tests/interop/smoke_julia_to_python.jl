@@ -77,7 +77,7 @@ functions = Dict(f["name"] => f for f in inventory["functions"])
 @assert functions["annotated_increment"]["returns"] == "integer"
 @assert haskey(functions, "unknown_interface")
 @assert functions["unknown_interface"]["arguments"] == ["any"]
-@assert local_module.annotated_increment(4) == 5
+@assert PythonCall.pyconvert(Int, local_module.annotated_increment(4)) == 5
 
 @assert PythonCall.pyconvert(Int, local_module.guarded_increment(4)) == 5
 let caught = false
