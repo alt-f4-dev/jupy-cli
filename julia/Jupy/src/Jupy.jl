@@ -2,6 +2,15 @@ module Jupy
 
 import PythonCall
 
+include("Contracts.jl")
+include("Discovery.jl")
+using .Contracts: Contract, ContractError, ContractViolation, read_contract, bind,
+                  register, resolve, describe, compatibility, Registry, register_validator
+
+export Contract, ContractError, ContractViolation, read_contract, bind_contract, bind,
+       register, resolve, describe, compatibility, Registry, register_validator,
+       inspect_module, inspect_julia, checked_module
+
 export python, pyimport, load, PythonRuntime
 
 """Use the process-local Python interpreter initialized by PythonCall."""
@@ -11,6 +20,24 @@ const python = PythonRuntime()
 const _lock = ReentrantLock()
 const _modules = Dict{String, Tuple{PythonCall.Py, Union{Nothing, String}}}()
 const _sources = Dict{String, String}()
+
+"""Read-only contract discovery; no per-call interception or runtime checks."""
+inspect_julia(m::Module; refresh::Bool=false) = Discovery.inspect_julia(m; refresh=refresh)
+inspect_module(name::AbstractString) = Discovery.python_manifest(name)
+
+"""
+    checked_module(name; path=nothing)
+
+Explicit contract-aware view for Python functions whose annotations can be
+reliably interpreted. Native `load` continues returning the original
+PythonCall handle; this view never rewrites Python's module namespace.
+Unannotated functions remain unwrapped and unconstrained.
+"""
+function checked_module(name::AbstractString; path=nothing)
+    source = load(name; path=path)
+    inspector = PythonCall.pyimport("jupy.discovery")
+    return inspector.checked_module(source)
+end
 
 """
     load(name; path=nothing)
@@ -72,9 +99,26 @@ function load(name::AbstractString; path::Union{Nothing, AbstractString}=nothing
         if !isnothing(source)
             _sources[source] = key
         end
+        Discovery.python_inventory(key, mod)
         return mod
     end
 end
+
+"""
+    bind_contract(contract; path=nothing, mode=:structural)
+
+Resolve the Python callable declared by a contract once using the Phase 1
+loader, specialize it, and register the callable under its contract identity.
+"""
+function bind_contract(c::Contract; path=nothing, mode::Symbol=:structural)
+    c.language == "python" || throw(ContractError("Julia-hosted contracts must target Python"))
+    module_handle = load(c.module_name; path=path)
+    target = getproperty(module_handle, Symbol(c.symbol))
+    return register(c.identity, target; contract=c, mode=mode)
+end
+bind_contract(path::AbstractString; kwargs...) =
+    bind_contract(read_contract(path); kwargs...)
+
 
 """Compatibility alias for the canonical `load` interface."""
 pyimport(name::AbstractString) = load(name)

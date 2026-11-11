@@ -1,0 +1,20 @@
+# Portable Jupy Contract v1, read by both Python and Julia.
+schema_version = 1
+
+[function]
+id = "examples.increment"
+version = "1.0.0"
+language = "julia"
+module = "ExampleInterop"
+symbol = "increment"
+
+[[inputs]]
+name = "value"
+kind = "integer"
+
+[output]
+name = "result"
+kind = "integer"
+
+[execution]
+purity = "impure"

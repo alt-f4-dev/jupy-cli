@@ -1,9 +1,9 @@
 name: Interoperability runtime
 on:
   push:
-    branches: [interop]
+    branches: [interop, interop-contract]
   pull_request:
-    paths: ['python/**', 'julia/**', 'tests/interop/**', '.github/workflows/interop-ci.yml', 'core/**']
+    paths: ['python/**', 'julia/**', 'tests/interop/**', 'tests/contracts/**', 'benchmarks/**', '.github/workflows/interop-ci.yml', 'core/**']
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -23,6 +23,9 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: python -m compileall -q python/jupy tests/interop
       - run: python -m unittest discover -s tests/interop -p 'test_*.py' -v
+      - name: Contract overhead measurements (Python)
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.14'
+        run: python benchmarks/contract_baseline.py benchmark-results/contract-python.json
       - run: python -m unittest discover -s tests -p 'test_*.py' -v
   integration:
     runs-on: ${{ matrix.os }}
@@ -47,16 +50,32 @@ jobs:
         run: |
           julia --startup-file=no --project=tests/interop/julia-project -e 'using Pkg; Pkg.add(PackageSpec(name="PythonCall", version="0.9.37")); Pkg.develop(path=abspath("julia/Jupy")); Pkg.instantiate()'
       - name: Python hosted Julia
-        run: python tests/interop/smoke_python_to_julia.py
+        shell: bash
+        run: |
+          python tests/interop/smoke_python_to_julia.py
+          echo validated > ".jupy-python-to-julia.complete"
       - name: Bind PythonCall to active Python interpreter
         shell: bash
         run: |
           echo "JULIA_PYTHONCALL_EXE=$(python -c 'import sys; print(sys.executable)')" >> "$GITHUB_ENV"
+      - name: Phase 2 portable contract conformance (Julia)
+        shell: bash
+        env:
+          JULIA_CONDAPKG_BACKEND: 'Null'
+        run: julia --startup-file=no --project=tests/interop/julia-project tests/interop/test_contracts.jl
       - name: Julia hosted Python
         shell: bash
         env:
           JULIA_CONDAPKG_BACKEND: 'Null'
-        run: julia --startup-file=no --project=tests/interop/julia-project tests/interop/smoke_julia_to_python.jl
+        run: |
+          julia --startup-file=no --project=tests/interop/julia-project tests/interop/smoke_julia_to_python.jl
+          echo validated > ".jupy-julia-to-python.complete"
+      - name: Verify both native execution directions completed
+        if: always()
+        shell: bash
+        run: |
+          test -f ".jupy-python-to-julia.complete" || { echo "Python-hosted Julia integration did not complete"; exit 1; }
+          test -f ".jupy-julia-to-python.complete" || { echo "Julia-hosted Python integration did not complete"; exit 1; }
 
   cli-installation:
     name: CLI setup (${{ matrix.backend }})
@@ -157,6 +176,13 @@ jobs:
         env:
           JULIA_CONDAPKG_BACKEND: 'Null'
         run: julia --startup-file=no --project=tests/interop/julia-project benchmarks/interop_baseline.jl benchmark-results/julia-python.csv
+      - name: Measure static-first contract overhead (Python)
+        run: python benchmarks/contract_baseline.py benchmark-results/contract-python.json
+      - name: Measure static-first contract overhead (Julia)
+        shell: bash
+        env:
+          JULIA_CONDAPKG_BACKEND: 'Null'
+        run: julia --startup-file=no --project=tests/interop/julia-project benchmarks/contract_baseline.jl benchmark-results/contract-julia.csv
       - uses: actions/upload-artifact@v4
         if: always()
         with:
