@@ -48,7 +48,7 @@ struct Spec
     validators::Vector{String}
 end
 
-const _TYPES = Set(["integer", "float", "boolean", "array"])
+const _TYPES = Set(["integer", "float", "boolean", "array", "any"])
 const _DTYPES = Set(["float32", "float64", "int32", "int64", "bool"])
 
 function make_spec(raw; output=false)
@@ -221,7 +221,10 @@ function run_validators(validators, value, where::String)
 end
 
 function validate!(s::Spec, raw, dimensions::Dict{String,Int}, where::String, strict::Bool, validators=Any[])
-    if s.kind == "array"
+    if s.kind == "any"
+        strict && run_validators(validators, raw, where)
+        return
+    elseif s.kind == "array"
         raw isa AbstractArray || throw(ContractViolation("$where: expected Julia AbstractArray"))
         if !isnothing(s.dtype)
             dtype_name(eltype(raw)) == s.dtype || throw(ContractViolation("$where: wrong dtype"))
