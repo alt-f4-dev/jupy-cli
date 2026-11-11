@@ -40,11 +40,11 @@ juuv simulation.jl
 
 Both options run Julia with the same Julia project and configure PythonCall to use the project's `.venv`.
 
-## Experimental bidirectional runtime (`interop` branch)
+## Experimental Julia–Python interoperability
 
-The `interop` branch adds the canonical `load()` API in both languages, plus an opt-in runtime facade backed by **JuliaCall** (Python → Julia) and **PythonCall** (Julia → Python), with process-local runtime reuse, deterministic Julia project ownership, and module caching. It does **not** translate source code or implement a replacement low-level bridge. This feature is not included in the v0.0.3 release.
+The `interop` branch provides the canonical `load()` API in both languages, plus an opt-in runtime facade backed by **JuliaCall** (Python → Julia) and **PythonCall** (Julia → Python), with process-local runtime reuse, deterministic Julia project ownership, and module caching. It does **not** translate source code or implement a replacement low-level bridge. This feature is not included in the v0.0.3 release.
 
-After cloning the repository, switch to `interop` (`git switch interop`) and run the installer before initializing a project using `jupy` or `juuv`, then run exactly one of:
+After cloning, select `interop` for runtime-only interoperability or `interop-contract` for the experimental automatic contract-discovery extensions. Run the installer from the selected branch before initializing a project using `jupy` or `juuv`, then run exactly one of:
 
 ```bash
 juuv --jupy-interop-setup  # uv project
@@ -68,6 +68,12 @@ using Jupy
 numpy = Jupy.load("numpy")
 result = numpy.asarray([1, 2, 3])
 ```
+
+The `interop-contract` branch automatically prepares descriptive function inventories during ordinary `load()` calls. Python annotations and locally declared Julia method signatures are discovered without creating a TOML file for each function. Applications continue to receive native JuliaCall/PythonCall module handles and ordinary calls remain unwrapped. For example, `jupy.inspect_module("LatticeSolver")` and `Jupy.inspect_module("lattice_solver")` expose the available cached metadata.
+
+Python package authors can use `@jupy.enforce_annotations` to enforce supported type annotations for downstream applications without requiring those applications to configure contracts. An explicit `Jupy.checked_module("lattice_solver")` or `jupy.checked_module(native_python_module)` provides an alternative validated view of an existing module. These checked views are separate from the original modules because replacing native module objects by default would break existing identity and dispatch expectations.
+
+**Discovery is not proof of correctness or a security sandbox.** Unannotated/unsupported interfaces remain marked unknown; numerical symmetry, finiteness, conservation laws, and memory ownership cannot be guaranteed from signatures alone. Julia modules with large namespaces defer expensive full-method enumeration to protect startup time, but every native function remains callable. See [automatic discovery and contract semantics](docs/phase2-contracts.md) for the exact guarantees, limits, and benchmark methodology.
 
 An embedded Julia runtime is initialized **once per Python process** and reused for subsequent calls. A new shell invocation starts a new process; no persistent cross-process daemon is created. The Julia project/executable cannot be switched once the process has initialized Julia. See [runtime contracts](docs/interop-runtime.md) and the [Phase 1 stabilization guarantees](docs/phase1-stabilization.md).
 
