@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 import sys
 import types
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "python"))
+import jupy.discovery as discovery
 from jupy.discovery import (
     annotation_guard, checked_module, inspect_python, invalidate,
     manifest_json, wire_python,
@@ -66,6 +68,32 @@ class AutomaticDiscoveryTests(unittest.TestCase):
             view.typed(False)
         self.assertEqual(module.typed(False), 1)
         self.assertIs(view.untyped, module.untyped)
+
+    def test_large_module_discovery_is_explicitly_deferred_and_cached(self):
+        class FakeMain:
+            calls = 0
+            def seval(self, expression):
+                self.calls += 1
+                self.source = expression
+                return lambda module: "__JUPY_DEFERRED__\\t1000"
+
+        class FakeRuntime:
+            main = FakeMain()
+            def start(self):
+                return self.main
+
+        name = "LargeModuleFixtureForDiscovery"
+        discovery._JULIA.pop(name, None)
+        runtime = FakeRuntime()
+        with patch.object(discovery, "_JULIA_INSPECTOR", None):
+            metadata = discovery.discover_julia(name, object(), runtime)
+            self.assertEqual(metadata["source"], "deferred_large_module")
+            self.assertEqual(metadata["symbol_count"], 1000)
+            self.assertEqual(metadata["functions"], [])
+            self.assertIn("length(symbols) > 128", runtime.main.source)
+            self.assertIs(discovery.discover_julia(name, object(), runtime), metadata)
+            self.assertEqual(runtime.main.calls, 1)
+        discovery._JULIA.pop(name, None)
 
     def test_output_checks_and_cache_invalidation(self):
         module = fixture_module()
