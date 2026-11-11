@@ -9,7 +9,7 @@ using .Contracts: Contract, ContractError, ContractViolation, read_contract, bin
 
 export Contract, ContractError, ContractViolation, read_contract, bind_contract, bind,
        register, resolve, describe, compatibility, Registry, register_validator,
-       inspect_module, inspect_julia
+       inspect_module, inspect_julia, checked_module
 
 export python, pyimport, load, PythonRuntime
 
@@ -24,6 +24,20 @@ const _sources = Dict{String, String}()
 """Read-only contract discovery; no per-call interception or runtime checks."""
 inspect_julia(m::Module; refresh::Bool=false) = Discovery.inspect_julia(m; refresh=refresh)
 inspect_module(name::AbstractString) = Discovery.python_manifest(name)
+
+"""
+    checked_module(name; path=nothing)
+
+Explicit contract-aware view for Python functions whose annotations can be
+reliably interpreted. Native `load` continues returning the original
+PythonCall handle; this view never rewrites Python's module namespace.
+Unannotated functions remain unwrapped and unconstrained.
+"""
+function checked_module(name::AbstractString; path=nothing)
+    source = load(name; path=path)
+    inspector = PythonCall.pyimport("jupy.discovery")
+    return inspector.checked_module(source)
+end
 
 """
     load(name; path=nothing)
