@@ -83,7 +83,7 @@ class AutomaticDiscoveryTests(unittest.TestCase):
 
     def test_string_annotations_without_code_execution(self):
         calls = []
-        def function(x: "int") -> "bool":
+        def function(x: int) -> bool:
             calls.append(x)
             return True
         f = annotation_guard(function)
