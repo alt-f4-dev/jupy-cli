@@ -40,7 +40,7 @@ function inspect_julia(mod::Module; refresh::Bool=false)
             for meth in methods(value)
                 meth.module === mod || continue
                 types = Base.unwrap_unionall(meth.sig).parameters
-                args = [string(_kind(T)) for T in types[2:end]]
+                args = [string(_kind(T)) for T in collect(types)[2:end]]
                 push!(signatures, Dict(
                     "signature" => string(meth.sig),
                     "arguments" => args,
