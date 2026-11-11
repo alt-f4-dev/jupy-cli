@@ -25,3 +25,12 @@ def annotated_increment(value: int) -> int:
 def unknown_interface(value):
     """Unannotated values remain explicitly unknown rather than trusted."""
     return value
+
+
+from jupy.discovery import annotation_guard
+
+
+@annotation_guard
+def guarded_increment(value: int) -> int:
+    """Package-author instrumentation works with ordinary module loading."""
+    return value + 1
