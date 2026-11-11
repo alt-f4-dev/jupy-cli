@@ -23,7 +23,7 @@ end
 """
     inspect_julia(module; refresh=false)
 
-Build a deterministic, descriptive TOML inventory of exported, locally
+Build a deterministic, descriptive TOML inventory of locally
 defined Julia methods without invoking the methods or evaluating source.
 Reflection is cached by module identity. Julia dispatch itself enforces
 declared method argument types; output properties remain unknown.
@@ -32,7 +32,7 @@ function inspect_julia(mod::Module; refresh::Bool=false)
     return lock(_lock) do
         !refresh && haskey(_native, mod) && return _native[mod]
         functions = Dict{String, Any}[]
-        for name in sort!(collect(names(mod; all=false, imported=false)); by=string)
+        for name in sort!(collect(names(mod; all=true, imported=false)); by=string)
             isdefined(mod, name) || continue
             value = getfield(mod, name)
             value isa Function || continue
