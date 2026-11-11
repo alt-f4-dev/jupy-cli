@@ -53,7 +53,7 @@ jobs:
         shell: bash
         run: |
           python tests/interop/smoke_python_to_julia.py
-          echo validated > "$RUNNER_TEMP/jupy-python-to-julia.complete"
+          echo validated > ".jupy-python-to-julia.complete"
       - name: Bind PythonCall to active Python interpreter
         shell: bash
         run: |
@@ -69,13 +69,13 @@ jobs:
           JULIA_CONDAPKG_BACKEND: 'Null'
         run: |
           julia --startup-file=no --project=tests/interop/julia-project tests/interop/smoke_julia_to_python.jl
-          echo validated > "$RUNNER_TEMP/jupy-julia-to-python.complete"
+          echo validated > ".jupy-julia-to-python.complete"
       - name: Verify both native execution directions completed
         if: always()
         shell: bash
         run: |
-          test -f "$RUNNER_TEMP/jupy-python-to-julia.complete" || { echo "Python-hosted Julia integration did not complete"; exit 1; }
-          test -f "$RUNNER_TEMP/jupy-julia-to-python.complete" || { echo "Julia-hosted Python integration did not complete"; exit 1; }
+          test -f ".jupy-python-to-julia.complete" || { echo "Python-hosted Julia integration did not complete"; exit 1; }
+          test -f ".jupy-julia-to-python.complete" || { echo "Julia-hosted Python integration did not complete"; exit 1; }
 
   cli-installation:
     name: CLI setup (${{ matrix.backend }})
