@@ -100,4 +100,13 @@ end
     @test Jupy.resolve("examples.python_sqrt") === wrapped
 end
 
-println("Julia Phase 2 contracts: parser, specialization, schemas, registry, and Python calls passed")
+@testset "Native Julia method inventory" begin
+    Base.include(Main, joinpath(@__DIR__, "ExampleInterop.jl"))
+    inventory = Jupy.inspect_julia(Main.ExampleInterop)
+    @test occursin("ExampleInterop", inventory)
+    @test occursin("increment", inventory)
+    @test occursin("integer", inventory)
+    @test Jupy.inspect_julia(Main.ExampleInterop) === inventory
+end
+
+println("Julia contracts: conformance, binding, native method discovery and Python calls passed")
