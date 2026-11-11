@@ -3,11 +3,13 @@ module Jupy
 import PythonCall
 
 include("Contracts.jl")
+include("Discovery.jl")
 using .Contracts: Contract, ContractError, ContractViolation, read_contract, bind,
                   register, resolve, describe, compatibility, Registry, register_validator
 
 export Contract, ContractError, ContractViolation, read_contract, bind_contract, bind,
-       register, resolve, describe, compatibility, Registry
+       register, resolve, describe, compatibility, Registry, register_validator,
+       inspect_module, inspect_julia
 
 export python, pyimport, load, PythonRuntime
 
@@ -18,6 +20,10 @@ const python = PythonRuntime()
 const _lock = ReentrantLock()
 const _modules = Dict{String, Tuple{PythonCall.Py, Union{Nothing, String}}}()
 const _sources = Dict{String, String}()
+
+"""Read-only contract discovery; no per-call interception or runtime checks."""
+inspect_julia(m::Module; refresh::Bool=false) = Discovery.inspect_julia(m; refresh=refresh)
+inspect_module(name::AbstractString) = Discovery.python_manifest(name)
 
 """
     load(name; path=nothing)
@@ -79,6 +85,7 @@ function load(name::AbstractString; path::Union{Nothing, AbstractString}=nothing
         if !isnothing(source)
             _sources[source] = key
         end
+        Discovery.python_inventory(key, mod)
         return mod
     end
 end
