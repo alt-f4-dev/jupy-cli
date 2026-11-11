@@ -75,7 +75,7 @@ class AutomaticDiscoveryTests(unittest.TestCase):
             def seval(self, expression):
                 self.calls += 1
                 self.source = expression
-                return lambda module: "__JUPY_DEFERRED__\\t1000"
+                return lambda module: "__JUPY_DEFERRED__\t1000"
 
         class FakeRuntime:
             main = FakeMain()
