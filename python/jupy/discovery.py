@@ -244,6 +244,16 @@ def discover_julia(name: str, module: Any, runtime: Any) -> dict[str, Any]:
             if _JULIA_INSPECTOR is None:
                 _JULIA_INSPECTOR = main.seval(_JULIA_INSPECTOR_CODE)
             wire = str(_JULIA_INSPECTOR(module))
+            if wire.startswith("__JUPY_DEFERRED__\\t"):
+                metadata = {
+                    "module": name, "language": "julia",
+                    "source": "deferred_large_module",
+                    "functions": [],
+                    "symbol_count": int(wire.split("\\t", 1)[1]),
+                    "reason": "full signature enumeration deferred to protect cold-start latency",
+                }
+                _JULIA[name] = metadata
+                return metadata
             entries: dict[str, list[dict[str, Any]]] = {}
             for record in wire.splitlines():
                 fields = record.split("\t", 2)
