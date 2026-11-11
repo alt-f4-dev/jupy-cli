@@ -15,3 +15,13 @@ def number_of_calls():
 
 def fail():
     raise ValueError("interop Python fixture failure")
+
+
+def annotated_increment(value: int) -> int:
+    """Type annotations are discoverable without a separate contract file."""
+    return value + 1
+
+
+def unknown_interface(value):
+    """Unannotated values remain explicitly unknown rather than trusted."""
+    return value
