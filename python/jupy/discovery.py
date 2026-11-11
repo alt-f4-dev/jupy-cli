@@ -13,6 +13,7 @@ import inspect
 import json
 import re
 import threading
+import tomllib
 import types
 import weakref
 from typing import Any, Callable
@@ -186,6 +187,43 @@ def manifest_dict(manifest: ModuleManifest) -> dict[str, Any]:
 def manifest_json(module: types.ModuleType) -> str:
     return json.dumps(manifest_dict(inspect_python(module)), sort_keys=True)
 
+
+
+# The Julia manifest is descriptive and cached by module name. It is not a
+# substitute for Julia's native method dispatch or a proof of output validity.
+_JULIA: dict[str, dict[str, Any]] = {}
+
+
+def discover_julia(name: str, module: Any, runtime: Any) -> dict[str, Any]:
+    """One-time, best-effort method reflection; never replace the module handle."""
+    with _LOCK:
+        if name in _JULIA:
+            return _JULIA[name]
+        metadata: dict[str, Any] = {
+            "module": name, "language": "julia",
+            "source": "unavailable", "functions": [],
+        }
+        try:
+            main = runtime.start()
+            main.seval("import Jupy")
+            raw = main.Jupy.inspect_julia(module)
+            parsed = tomllib.loads(str(raw))
+            if parsed.get("module") == name and parsed.get("language") == "julia":
+                metadata = parsed
+            else:
+                metadata["reason"] = "unexpected Julia metadata identity"
+        except Exception as exc:
+            # Jupy's discovery is advisory; unsupported Julia projects and
+            # mixed environments must retain direct, native load semantics.
+            metadata["reason"] = type(exc).__name__
+        _JULIA[name] = metadata
+        return metadata
+
+
+def julia_manifest(name: str) -> dict[str, Any] | None:
+    """Return the cached inventory; do not invoke the Julia runtime."""
+    with _LOCK:
+        return _JULIA.get(name)
 
 def invalidate(module: types.ModuleType) -> None:
     """Explicit cache invalidation for intentional external Python reloads."""
