@@ -79,4 +79,26 @@ functions = Dict(f["name"] => f for f in inventory["functions"])
 @assert functions["unknown_interface"]["arguments"] == ["any"]
 @assert local_module.annotated_increment(4) == 5
 
-println("Julia -> Python: canonical loading, automatic discovery and native execution verified")
+@assert PythonCall.pyconvert(Int, local_module.guarded_increment(4)) == 5
+let caught = false
+    try
+        local_module.guarded_increment("wrong")
+    catch err
+        caught = err isa PythonCall.PyException
+    end
+    @assert caught "Developer-instrumented function must reject incompatible input"
+end
+
+view = Jupy.checked_module("ExamplePythonInterop")
+@assert PythonCall.pyconvert(Int, view.annotated_increment(5)) == 6
+let caught = false
+    try
+        view.annotated_increment("bad")
+    catch err
+        caught = err isa PythonCall.PyException
+    end
+    @assert caught "Checked annotation view did not reject incompatible argument"
+end
+@assert Jupy.load("ExamplePythonInterop") === local_module
+
+println("Julia -> Python: native identity, discovery, author enforcement, and checked views verified")
