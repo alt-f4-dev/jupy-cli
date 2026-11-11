@@ -137,9 +137,11 @@ Users who want to inspect the automatically discovered facts can call
 `Jupy.inspect_module("lattice_solver")`. Introspection is advisory:
 a missing inspector, unsupported signature, or a function without
 annotations is **not** silently promoted to a verified contract.
-If Python-side Julia discovery cannot access the optional Julia introspection
-helper, loading still works and the inventory reports that discovery was
-unavailable.
+Python-hosted Julia discovery uses a small Julia Base reflection function;
+it deliberately does **not** load Julia-side Jupy or PythonCall solely for
+introspection, avoiding unnecessary initialization of a second bridge.
+If reflection is unsupported, loading still works and the inventory reports
+that discovery was unavailable.
 
 ### Enforcement without application-side setup
 
