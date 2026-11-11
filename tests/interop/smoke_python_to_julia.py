@@ -43,4 +43,17 @@ except jupy.ContractViolation:
 else:
     raise AssertionError("cross-language contract did not reject a boolean")
 
-print("Python -> Julia: persistent runtime, function contract and state verified")
+# Ordinary public load also discovers declared Julia method types, without
+# requiring TOML or explicit function registration.
+native = jupy.load("ExampleInterop", path=MODULE)
+assert native is example
+inventory = jupy.inspect_module("ExampleInterop")
+assert inventory is not None, "missing automatic Julia inventory"
+assert inventory["source"] == "runtime_method_reflection", inventory
+discovered = {entry["name"]: entry for entry in inventory["functions"]}
+assert "increment" in discovered, inventory
+assert any("integer" in method["arguments"]
+           for method in discovered["increment"]["methods"])
+assert native.increment(10) == 11
+
+print("Python -> Julia: persistent runtime, automatic discovery and contracts verified")
