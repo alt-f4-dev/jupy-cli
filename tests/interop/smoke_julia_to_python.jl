@@ -66,4 +66,17 @@ let caught = false
     @assert caught "Jupy must not overwrite existing Python module identities"
 end
 
-println("Julia -> Python: canonical load, identity, state and exceptions verified")
+# Ordinary loading prepares an annotation inventory once, while preserving
+# the underlying PythonCall.Py identity and native method semantics.
+inventory = Jupy.inspect_module("ExamplePythonInterop")
+@assert inventory !== nothing
+@assert inventory["source"] == "runtime_python_inspection" inventory
+functions = Dict(f["name"] => f for f in inventory["functions"])
+@assert haskey(functions, "annotated_increment")
+@assert functions["annotated_increment"]["arguments"] == ["integer"]
+@assert functions["annotated_increment"]["returns"] == "integer"
+@assert haskey(functions, "unknown_interface")
+@assert functions["unknown_interface"]["arguments"] == ["any"]
+@assert local_module.annotated_increment(4) == 5
+
+println("Julia -> Python: canonical loading, automatic discovery and native execution verified")
