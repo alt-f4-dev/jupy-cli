@@ -23,7 +23,7 @@ _ID = re.compile(r"^[A-Za-z_][A-Za-z_0-9]*(?:\.[A-Za-z_][A-Za-z_0-9]*)*$")
 _VERSION = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 _SYMBOL = re.compile(r"^[A-Za-z_][A-Za-z_0-9]*$")
 _SCALE = re.compile(r"^([1-9]\d*)\*([A-Za-z_][A-Za-z_0-9]*)$")
-_TYPES = {"integer", "float", "boolean", "array"}
+_TYPES = {"integer", "float", "boolean", "array", "any"}
 _DTYPES = {"float32", "float64", "int32", "int64", "bool"}
 _MODES = {"static", "structural", "strict", "trusted"}
 
@@ -263,6 +263,10 @@ def _run_validators(validators: tuple[Callable[[Any], bool], ...], value: Any, w
 
 def _check(spec: Spec, value: Any, dimensions: dict[str, int],
            where: str, strict: bool, validators: tuple[Callable[[Any], bool], ...] = ()) -> None:
+    if spec.kind == "any":
+        if strict:
+            _run_validators(validators, value, where)
+        return
     if spec.kind == "integer":
         if not isinstance(value, int) or isinstance(value, bool):
             raise ContractViolation(f"{where}: expected integer")
@@ -314,7 +318,7 @@ def _check(spec: Spec, value: Any, dimensions: dict[str, int],
 
 def bind(function: Callable[..., Any], contract: Contract | str | Path,
          *, mode: str = "structural") -> Callable[..., Any]:
-    """One-time specialization; trusted/static modes return the original callable.
+    """One-time specialization; trusted mode returns the original callable.
 
     static mode can only eliminate checks for input-free, unobservable-output
     contracts; otherwise no runtime proof is possible. trusted explicitly
