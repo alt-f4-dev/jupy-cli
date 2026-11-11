@@ -131,6 +131,15 @@ a separate initialization command:
 - Results are cached at module load. No contract metadata lookup or parsing
   occurs inside subsequent native function calls. The module handle and
   original callable objects remain unchanged.
+- Julia modules with more than 128 visible names are marked
+  `deferred_large_module` instead of exhaustively enumerating all methods
+  during interpreter startup. For large standard-library modules, eager
+  method enumeration can significantly increase cold-start cost without
+  improving native Julia dispatch. Jupy records the symbol count and deferred
+  status explicitly rather than incorrectly presenting an empty inventory
+  as evidence that no callable functions exist. The threshold limits eager
+  metadata work, **not** function availability; all native Julia functions
+  remain callable. Smaller application modules are introspected fully.
 
 Users who want to inspect the automatically discovered facts can call
 `jupy.inspect_module("LatticeSolver")` or
