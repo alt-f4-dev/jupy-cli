@@ -99,6 +99,98 @@ has a validated native array layout.
 `purity` is *declared metadata*, not automatically established or
 enforced by the runtime.
 
+
+## Automatic interface discovery and ordinary use
+
+Most applications should continue loading modules directly:
+
+```python
+import jupy
+solver = jupy.load("LatticeSolver")  # native JuliaCall module, unchanged
+results = solver.solve(matrix)
+```
+
+```julia
+using Jupy
+solver = Jupy.load("lattice_solver") # native PythonCall module, unchanged
+results = solver.solve(matrix)
+```
+
+A first successful canonical load now **prepares a cached descriptive module
+inventory** without requiring a TOML contract, per-function registration, or
+a separate initialization command:
+
+- Python-hosted Julia: Jupy asks Julia's native method reflection for
+  exported, locally declared functions. Each inventory records the method
+  signature and known argument categories; Julia's existing multiple-dispatch
+  machinery independently enforces applicable method argument types.
+- Julia-hosted Python: a lightweight Python inspector examines the module
+  dictionary and ordinary function signatures. It recognizes safely
+  interpretable built-in type annotations; missing or unsupported annotations
+  remain `any` (unknown). String annotations are **never evaluated**.
+- Results are cached at module load. No contract metadata lookup or parsing
+  occurs inside subsequent native function calls. The module handle and
+  original callable objects remain unchanged.
+
+Users who want to inspect the automatically discovered facts can call
+`jupy.inspect_module("LatticeSolver")` or
+`Jupy.inspect_module("lattice_solver")`. Introspection is advisory:
+a missing inspector, unsupported signature, or a function without
+annotations is **not** silently promoted to a verified contract.
+If Python-side Julia discovery cannot access the optional Julia introspection
+helper, loading still works and the inventory reports that discovery was
+unavailable.
+
+### Enforcement without application-side setup
+
+Package authors can instrument Python functions where correctness checks
+are appropriate:
+
+```python
+import jupy
+
+@jupy.enforce_annotations
+def increment(value: int) -> int:
+    return value + 1
+```
+
+The decorator compiles the supported checks once at function definition.
+Downstream Julia and Python applications call `increment` normally; no
+TOML file, `bind_contract()`, or application-side registration is required.
+An unannotated function receives no wrapper. Unknown annotations add **no
+invented checks**. Ordinary Python annotations have no enforcement by
+themselves; the author must opt into instrumentation to enforce them.
+
+For an existing Python module whose author did not instrument functions,
+`Jupy.checked_module("module_name")` returns a *separate* annotation-aware
+view, and Python exposes `jupy.checked_module(native_python_module)`.
+These views may impose wrapper and Python signature-binding overhead.
+They are not the default, because replacing native module objects would
+break existing Phase 1 identity and dispatch guarantees.
+
+### What automatic discovery does not prove
+
+**Automatic introspection does not secure arbitrary cross-language computation.**
+It cannot prove that a Python function obeys its annotations; it does not
+verify numerical finiteness, symmetry, acoustic sum rules, safe memory
+ownership, or valid scientific results. Julia dispatch validates declared
+method applicability, not the semantic correctness of the computation.
+No runtime should execute untrusted third-party Python/Julia modules
+merely to inspect their contracts: loading an untrusted module can itself
+execute arbitrary initialization code.
+
+Declared `purity`, type annotations, and native method signatures are
+metadata unless the relevant runtime or an explicit checked callable
+enforces them. Numerical guarantees require the existing strict contract
+engine or trusted construction paths. Automatic discovery must never be
+described as a security sandbox or mathematical proof.
+
+The Python inspector's module inventory can be refreshed explicitly after
+intentional external reloads via `jupy.discovery.invalidate(module)`.
+Julia method metadata is cached by native module identity; its inspector
+supports `refresh=true`. Ordinary Jupy module loading still does not
+support implicit hot reload or cross-process registry persistence.
+
 ## Symmetric public API
 
 Python loading and binding Julia:
