@@ -189,13 +189,49 @@ def manifest_json(module: types.ModuleType) -> str:
 
 
 
-# The Julia manifest is descriptive and cached by module name. It is not a
-# substitute for Julia's native method dispatch or a proof of output validity.
+# Julia reflection uses only Base, not the Julia Jupy package or PythonCall.
+# Loading the full package just to inspect function types would initialize
+# a second bridge and impose significant avoidable cold-start overhead.
 _JULIA: dict[str, dict[str, Any]] = {}
+_JULIA_INSPECTOR: Any = None
+_JULIA_INSPECTOR_CODE = r"""
+mod -> begin
+    lines = String[]
+    for sym in Base.names(mod; all=true, imported=false)
+        Base.isdefined(mod, sym) || continue
+        f = Base.getfield(mod, sym)
+        f isa Function || continue
+        for meth in Base.methods(f)
+            meth.module === mod || continue
+            types = collect(Base.unwrap_unionall(meth.sig).parameters)
+            args = String[]
+            for t in types[2:end]
+                kind = "any"
+                if t isa Type
+                    if t <: Bool
+                        kind = "boolean"
+                    elseif t <: Integer
+                        kind = "integer"
+                    elseif t <: AbstractFloat
+                        kind = "float"
+                    elseif t <: AbstractArray
+                        kind = "array"
+                    end
+                end
+                push!(args, kind)
+            end
+            signature = replace(string(meth.sig), '\\t' => ' ', '\\n' => ' ')
+            push!(lines, string(sym, "\\t", join(args, ","), "\\t", signature))
+        end
+    end
+    return join(lines, "\\n")
+end
+"""
 
 
 def discover_julia(name: str, module: Any, runtime: Any) -> dict[str, Any]:
-    """One-time, best-effort method reflection; never replace the module handle."""
+    """Inspect local Julia methods without importing PythonCall into Julia."""
+    global _JULIA_INSPECTOR
     with _LOCK:
         if name in _JULIA:
             return _JULIA[name]
@@ -205,25 +241,41 @@ def discover_julia(name: str, module: Any, runtime: Any) -> dict[str, Any]:
         }
         try:
             main = runtime.start()
-            main.seval("import Jupy")
-            raw = main.Jupy.inspect_julia(module)
-            parsed = tomllib.loads(str(raw))
-            if parsed.get("module") == name and parsed.get("language") == "julia":
-                metadata = parsed
-            else:
-                metadata["reason"] = "unexpected Julia metadata identity"
+            if _JULIA_INSPECTOR is None:
+                _JULIA_INSPECTOR = main.seval(_JULIA_INSPECTOR_CODE)
+            wire = str(_JULIA_INSPECTOR(module))
+            entries: dict[str, list[dict[str, Any]]] = {}
+            for record in wire.splitlines():
+                fields = record.split("\\t", 2)
+                if len(fields) != 3:
+                    continue
+                symbol, raw_args, signature = fields
+                args = raw_args.split(",") if raw_args else []
+                entries.setdefault(symbol, []).append({
+                    "arguments": args, "signature": signature,
+                    "returns": "any", "provenance": "julia_method_dispatch",
+                })
+            metadata = {
+                "module": name, "language": "julia",
+                "source": "runtime_method_reflection",
+                "functions": [
+                    {"name": symbol, "methods": methods}
+                    for symbol, methods in sorted(entries.items())
+                ],
+            }
         except Exception as exc:
-            # Jupy's discovery is advisory; unsupported Julia projects and
-            # mixed environments must retain direct, native load semantics.
+            # A failure in advisory reflection must not change module identity
+            # or suppress a working native JuliaCall import.
             metadata["reason"] = type(exc).__name__
         _JULIA[name] = metadata
         return metadata
 
 
 def julia_manifest(name: str) -> dict[str, Any] | None:
-    """Return the cached inventory; do not invoke the Julia runtime."""
+    """Read cached Julia signatures without invoking Julia again."""
     with _LOCK:
         return _JULIA.get(name)
+
 
 def invalidate(module: types.ModuleType) -> None:
     """Explicit cache invalidation for intentional external Python reloads."""
