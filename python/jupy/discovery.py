@@ -196,8 +196,14 @@ _JULIA: dict[str, dict[str, Any]] = {}
 _JULIA_INSPECTOR: Any = None
 _JULIA_INSPECTOR_CODE = r"""
 mod -> begin
+    symbols = Base.names(mod; all=true, imported=false)
+    # Restrict eager enumeration of large namespaces, while preserving exact
+    # native function identity and reporting that metadata is deferred.
+    if length(symbols) > 128
+        return string("__JUPY_DEFERRED__", '\t', length(symbols))
+    end
     lines = String[]
-    for sym in Base.names(mod; all=true, imported=false)
+    for sym in symbols
         Base.isdefined(mod, sym) || continue
         f = Base.getfield(mod, sym)
         f isa Function || continue
@@ -244,12 +250,12 @@ def discover_julia(name: str, module: Any, runtime: Any) -> dict[str, Any]:
             if _JULIA_INSPECTOR is None:
                 _JULIA_INSPECTOR = main.seval(_JULIA_INSPECTOR_CODE)
             wire = str(_JULIA_INSPECTOR(module))
-            if wire.startswith("__JUPY_DEFERRED__\\t"):
+            if wire.startswith("__JUPY_DEFERRED__\t"):
                 metadata = {
                     "module": name, "language": "julia",
                     "source": "deferred_large_module",
                     "functions": [],
-                    "symbol_count": int(wire.split("\\t", 1)[1]),
+                    "symbol_count": int(wire.split("\t", 1)[1]),
                     "reason": "full signature enumeration deferred to protect cold-start latency",
                 }
                 _JULIA[name] = metadata
