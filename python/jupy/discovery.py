@@ -220,11 +220,11 @@ mod -> begin
                 end
                 push!(args, kind)
             end
-            signature = replace(string(meth.sig), '\\t' => ' ', '\\n' => ' ')
-            push!(lines, string(sym, "\\t", join(args, ","), "\\t", signature))
+            signature = replace(string(meth.sig), '\t' => ' ', '\n' => ' ')
+            push!(lines, string(sym, "\t", join(args, ","), "\t", signature))
         end
     end
-    return join(lines, "\\n")
+    return join(lines, "\n")
 end
 """
 
@@ -246,7 +246,7 @@ def discover_julia(name: str, module: Any, runtime: Any) -> dict[str, Any]:
             wire = str(_JULIA_INSPECTOR(module))
             entries: dict[str, list[dict[str, Any]]] = {}
             for record in wire.splitlines():
-                fields = record.split("\\t", 2)
+                fields = record.split("\t", 2)
                 if len(fields) != 3:
                     continue
                 symbol, raw_args, signature = fields
