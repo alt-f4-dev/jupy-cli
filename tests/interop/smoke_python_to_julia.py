@@ -55,5 +55,8 @@ assert "increment" in discovered, inventory
 assert any("integer" in method["arguments"]
            for method in discovered["increment"]["methods"])
 assert native.increment(10) == 11
+# Discovery must not import the full Julia-side Jupy/PythonCall runtime merely
+# to introspect a Julia function; that would degrade startup substantially.
+assert not jupy.julia.start().seval("isdefined(Main, :Jupy)")
 
 print("Python -> Julia: persistent runtime, automatic discovery and contracts verified")
